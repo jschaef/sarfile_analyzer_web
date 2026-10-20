@@ -50,20 +50,24 @@ Painted time in ms, 11 runs each:
 
 | Scenario | Renderer | Points drawn from | Payload | Median | Min | Max |
 |---|---|---|---:|---:|---:|---:|
-| cpu-overview | BokehJS | 9 450 (server-sampled) | 63 KB | **333.7** | 299.6 | 383.2 |
-| cpu-overview | ECharts, full rows | 28 330 | 729 KB | **250.6** | 218.1 | 268.5 |
-| cpu-overview | ECharts, Bokeh's rows | 9 450 | 243 KB | **183.3** | 169.5 | 200.8 |
-| cpu-per-core | BokehJS | 66 528 (server-sampled) | 764 KB | **1 786.7** | 1 473.7 | 1 999.9 |
-| cpu-per-core | ECharts, full rows | 997 216 | 25.6 MB | **1 827.5** | 1 499.5 | 2 084.4 |
-| cpu-per-core | ECharts, Bokeh's rows | 66 528 | 1.7 MB | **589.0** | 535.0 | 639.4 |
+| cpu-overview | BokehJS | 9 450 (server-sampled) | 63 KB | **349.7** | 333.6 | 521.2 |
+| cpu-overview | ECharts, full rows | 28 330 | 729 KB | **245.7** | 213.8 | 300.3 |
+| cpu-overview | ECharts, Bokeh's rows | 9 450 | 243 KB | **200.9** | 168.6 | 247.7 |
+| cpu-per-core | BokehJS | 66 528 (server-sampled) | 764 KB | **2 065.6** | 1 739.8 | 2 196.2 |
+| cpu-per-core | ECharts, full rows | 997 216 | 25.6 MB | **1 963.1** | 1 648.2 | 2 208.9 |
+| cpu-per-core | ECharts, Bokeh's rows | 66 528 | 1.7 MB | **722.5** | 583.8 | 802.3 |
 
-The ECharts numbers include the row→column conversion (median 13.1 ms /
-4.6 ms / 67.9 ms / 14.5 ms in the order of the table).
+The ECharts numbers include the row→column conversion (median 13.8 ms /
+4.4 ms / 79.2 ms / 17.1 ms in the order of the table).
 
-An earlier full run (11 runs, before a layout-only change of the chart option)
-gave medians of 321.8 / 216.8 / 167.9 / 1 684.0 / 1 689.7 / 604.8 ms in the
-same order. The ordering between the cases did not change; absolute numbers
-move by roughly ±10 % between runs on this machine.
+The table is the run against the current option builder. Two earlier full runs
+(11 runs each, with earlier versions of the chart option that differ only in
+layout, restart-marker placement and the pinned x-axis range) gave medians of
+321.8 / 216.8 / 167.9 / 1 684.0 / 1 689.7 / 604.8 ms and
+333.7 / 250.6 / 183.3 / 1 786.7 / 1 827.5 / 589.0 ms in the same order. Bokeh's
+side did not change between the runs, yet its medians moved by up to 23 %: on
+this shared machine absolute numbers vary that much between runs. The ordering
+between the cases was the same in all three runs.
 
 ### Costs outside the timed span (context, not part of the comparison)
 
@@ -82,13 +86,13 @@ response time is an order of magnitude larger than either renderer.
 ## What the numbers show
 
 - **CPU overview chart (the requested case):** ECharts painted faster than
-  BokehJS in both variants – with the full 28 330 points (median 250.6 vs
-  333.7 ms) and with identical 9 450 points (183.3 vs 333.7 ms). The ranges
+  BokehJS in both variants – with the full 28 330 points (median 245.7 vs
+  349.7 ms) and with identical 9 450 points (200.9 vs 349.7 ms). The ranges
   do not overlap.
 - **~1 M points (stress case):** ECharts with all 997 216 points (median
-  1 827.5 ms) and BokehJS with its server-sampled 66 528 points (median
-  1 786.7 ms) are within each other's min–max range. On identical points ECharts
-  was faster (589.0 vs 1 786.7 ms).
+  1 963.1 ms) and BokehJS with its server-sampled 66 528 points (median
+  2 065.6 ms) are within each other's min–max range. On identical points ECharts
+  was faster (722.5 vs 2 065.6 ms).
 - The full-rows ECharts variant needs a 25.6 MB JSON for the stress case;
   that cost (transfer + `JSON.parse`) is not in the timed span.
 
