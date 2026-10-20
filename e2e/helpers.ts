@@ -15,7 +15,8 @@ export async function login(page: Page) {
 
 // Uploads one file on the Files page and returns the name the API gave it.
 export async function upload(page: Page, path: string, hostPart: string): Promise<string> {
-  await page.getByRole("link", { name: "Manage SAR Files" }).click();
+  // the main navigation - an empty overview shows a second link with that name
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Manage SAR Files" }).click();
   await expect(page).toHaveURL(/\/files/);
   await page.getByTestId("upload-input").setInputFiles(path);
   await expect(page.getByText(/^Uploaded as /).first()).toBeVisible({ timeout: 90_000 });
