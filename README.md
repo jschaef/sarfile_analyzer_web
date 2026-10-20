@@ -131,3 +131,9 @@ e2e/                      Playwright tests + small fixture
 perf/                     benchmark (export_payloads.py, bench.mjs)
 scripts/generate_sar.py   synthetic sar generator
 ```
+
+## License
+
+GNU General Public License v3.0, like the backend
+[jschaef/sarfile_analyzer_ng](https://github.com/jschaef/sarfile_analyzer_ng).
+See [LICENSE](LICENSE).
