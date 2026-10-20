@@ -1,7 +1,10 @@
 # SAR Analyzer – Next.js frontend (Phase 1)
 
-A web frontend for the existing FastAPI in [`../api`](../api). All parsing and
-polars work stays in Python; this app only renders. Phase 1 covers:
+A web frontend for the FastAPI of
+[jschaef/sarfile_analyzer_ng](https://github.com/jschaef/sarfile_analyzer_ng)
+(its `api/` directory). This repository contains only the frontend; it talks to
+the API over HTTP and needs no code from it at runtime. All parsing and polars
+work stays in Python; this app only renders. Phase 1 covers:
 
 - **Login**: username/password against the analyzer user DB; the API token is
   kept in an httpOnly cookie and never reaches browser JavaScript.
@@ -24,14 +27,14 @@ browser ──► Next.js :3000 ──┬─ /api/auth/login|logout   route hand
                                           ─ rewrite (next.config.ts) ──► FastAPI :8100 /api/v1/*
 ```
 
-- Same origin for the browser, so `api/` needs no CORS change.
+- Same origin for the browser, so the API needs no CORS change.
 - `proxy.ts` (Next 16's new name for middleware) also redirects pages to
   `/login` when no session cookie exists. The API validates the token on every
   call; a 401 drops the cookie and sends the user to the login page.
 - Uploads do not go through the rewrite: Next.js buffers bodies on
   proxy-matched paths and cuts them at 10 MB.
 
-### Overview rules taken over from `code/dia_overview_pl.py`
+### Overview rules taken over from `code/dia_overview_pl.py` (backend repo)
 
 - Options are the file's aliases sorted ascending; the **diagram order follows
   that option order, not the click order** (`sel_order_map`).
@@ -46,14 +49,16 @@ browser ──► Next.js :3000 ──┬─ /api/auth/login|logout   route hand
 ## Run locally
 
 ```bash
-# 1. API (repo root, own venv)
+# 1. API: checkout of the backend next to this repo, own venv
+git clone https://github.com/jschaef/sarfile_analyzer_ng ../sarfile_analyzer_ng
+cd ../sarfile_analyzer_ng
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r api/requirements.txt -r code/requirements.txt
 export SAR_API_SECRET=$(openssl rand -hex 32) UPLOAD_DIR=/tmp/sar-upload REDIS_ENABLED=false
 uvicorn api.main:app --host 127.0.0.1 --port 8100
 
-# 2. frontend
-cd web
+# 2. frontend (this repo)
+cd ../sarfile_analyzer_web
 npm ci
 npm run dev                       # http://localhost:3000, seed login admin / password
 ```
@@ -86,7 +91,8 @@ Options for the e2e run:
 - `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome` – use a preinstalled Chromium.
 - `SAR_E2E_SKIP_API=1` – never start the API from Playwright; `SAR_E2E_API_CMD`
   changes the start command (default `uvicorn api.main:app --port 8100`, run in
-  the repo root; needs `SAR_API_SECRET`/`UPLOAD_DIR` in the environment).
+  `SAR_BACKEND_DIR`, default `../sarfile_analyzer_ng`; `uvicorn` must be on the
+  PATH, e.g. the backend venv activated, and `SAR_API_SECRET`/`UPLOAD_DIR` set).
 - `SAR_E2E_REAL_FILE=/path/to/sar-file SAR_E2E_REAL_HOST=<host>` – additionally
   runs `e2e/real-file.spec.ts` against a real sar file outside the repo.
 - `SAR_SCREENSHOTS_DIR=docs/screenshots [SAR_SCREENSHOTS_WIDTH=1024]` – writes the
@@ -95,7 +101,7 @@ Options for the e2e run:
 ## Test data
 
 There are no real sar files in the repo. `scripts/generate_sar.py` writes a
-synthetic `sar -A` text report that `code/parse_into_polars.py` accepts
+synthetic `sar -A` text report that the backend's `code/parse_into_polars.py` accepts
 (deterministic, stdlib only):
 
 ```bash

@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Export the chart payloads for perf/bench.mjs (ECharts vs BokehJS).
 
-Run from the repo root with the venv of code/ + api/ (read-only use of both):
+Needs a checkout of jschaef/sarfile_analyzer_ng (imports its code/ and api/
+read-only) and that project's venv:
 
-    UPLOAD_DIR=... python3 web/perf/export_payloads.py --user admin \
-        --file 2026-10-20_bighost_2026-10-01 --out web/perf/out
+    SAR_BACKEND_DIR=../sarfile_analyzer_ng UPLOAD_DIR=... \
+        ../sarfile_analyzer_ng/.venv/bin/python perf/export_payloads.py \
+        --user admin --file 2026-10-20_bighost_2026-10-01 --out perf/out
+
+SAR_BACKEND_DIR defaults to a sibling directory ../sarfile_analyzer_ng.
 
 Writes per scenario:
   <scenario>.bokeh.json    json_item() of bokeh_charts.overview_v1 - exactly what
@@ -24,12 +28,20 @@ Scenarios:
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO))
+BACKEND = Path(
+    os.environ.get(
+        "SAR_BACKEND_DIR",
+        Path(__file__).resolve().parents[1].parent / "sarfile_analyzer_ng",
+    )
+).resolve()
+if not (BACKEND / "api" / "bootstrap.py").is_file():
+    sys.exit(f"sarfile_analyzer_ng checkout not found at {BACKEND} - set SAR_BACKEND_DIR")
+sys.path.insert(0, str(BACKEND))
 
 from api import bootstrap  # noqa: E402,F401  (puts code/ on sys.path)
 from api import services  # noqa: E402

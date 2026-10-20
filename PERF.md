@@ -13,7 +13,7 @@ data into a painted chart in the browser?
     `finished` event → two `requestAnimationFrame`s.
   - **Bokeh** (the Streamlit path): `Bokeh.embed.embed_item(json_item)` → poll
     until every root view reports `has_finished()` → two `requestAnimationFrame`s.
-    The `json_item` comes from `bokeh_charts.overview_v1(...)` + `json_item()`,
+    The `json_item` comes from the backend's `bokeh_charts.overview_v1(...)` + `json_item()`,
     which is what `streamlit_bokeh_component.serialize_figure` sends.
 - **Same browser for both:** one headless Chromium, a fresh page per measurement,
   1280×900 viewport, chart 1200×400 px, libraries served locally (no CDN).
@@ -100,10 +100,11 @@ browsers, Firefox/Safari.
 
 ```bash
 # API running with UPLOAD_DIR set, large fixture uploaded as user admin
-python3 web/scripts/generate_sar.py --cpus 352 --samples 2833 --interval 30 --minimal -o /tmp/sar_large.txt
+python3 scripts/generate_sar.py --cpus 352 --samples 2833 --interval 30 --minimal -o /tmp/sar_large.txt
 # (upload /tmp/sar_large.txt via the UI or POST /api/v1/files)
-UPLOAD_DIR=... python3 web/perf/export_payloads.py --file <uploaded name> --out web/perf/out
-cd web
+# export_payloads.py imports the backend (default ../sarfile_analyzer_ng) - use its venv
+SAR_BACKEND_DIR=../sarfile_analyzer_ng UPLOAD_DIR=... \
+  ../sarfile_analyzer_ng/.venv/bin/python perf/export_payloads.py --file <uploaded name> --out perf/out
 PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome npm run bench -- perf/out 11
 # BENCH_SCREENSHOTS=<dir> keeps one screenshot per case
 ```

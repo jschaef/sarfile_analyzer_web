@@ -1,11 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// The e2e test needs both servers: the FastAPI from api/ (port 8100) and this
-// Next.js app (port 3000, production build: run `npm run build` first).
-// Already running servers are reused. Set SAR_E2E_SKIP_API=1 to never start
-// the API from here, or SAR_E2E_API_CMD to change how it is started.
+// The e2e test needs both servers: the FastAPI from a checkout of
+// jschaef/sarfile_analyzer_ng (port 8100) and this Next.js app (port 3000,
+// production build: run `npm run build` first). Already running servers are
+// reused. SAR_BACKEND_DIR points to the backend checkout (default: a sibling
+// directory ../sarfile_analyzer_ng). Set SAR_E2E_SKIP_API=1 to never start the
+// API from here, or SAR_E2E_API_CMD to change how it is started.
 const apiCommand =
   process.env.SAR_E2E_API_CMD ?? "uvicorn api.main:app --host 127.0.0.1 --port 8100";
+const backendDir = process.env.SAR_BACKEND_DIR ?? "../sarfile_analyzer_ng";
 const port = Number(process.env.PORT ?? 3000);
 
 export default defineConfig({
@@ -30,7 +33,7 @@ export default defineConfig({
       : [
           {
             command: apiCommand,
-            cwd: "..",
+            cwd: backendDir,
             url: "http://127.0.0.1:8100/api/v1/health",
             reuseExistingServer: true,
             timeout: 120_000,

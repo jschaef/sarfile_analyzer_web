@@ -2,8 +2,9 @@
 """Generate a synthetic `sar -A` text report for tests and benchmarks.
 
 The output is NOT real data. It only mimics the classic sysstat text layout
-closely enough that code/parse_into_polars.parse_sar_file (and therefore the
-FastAPI upload in api/) accepts it:
+closely enough that code/parse_into_polars.parse_sar_file of
+jschaef/sarfile_analyzer_ng (and therefore the FastAPI upload in its api/)
+accepts it:
 
 - first line: "Linux <release> (<host>) <YYYY-MM-DD> _<arch>_ (<n> CPU)"
 - one block per activity, introduced by an empty line and a header line that
@@ -17,11 +18,11 @@ noise), so charts look plausible. Only the Python standard library is used.
 
 Examples:
     # small fixture used by the e2e test (checked in)
-    python3 web/scripts/generate_sar.py --cpus 4 --samples 96 \
-        --interval 900 --restart -o web/e2e/fixtures/sar_small.txt
+    python3 scripts/generate_sar.py --cpus 4 --samples 96 \
+        --interval 900 --restart -o e2e/fixtures/sar_small.txt
 
-    # large fixture for web/PERF.md (~1M rows in the CPU section, NOT checked in)
-    python3 web/scripts/generate_sar.py --cpus 352 --samples 2833 \
+    # large fixture for PERF.md (~1M rows in the CPU section, NOT checked in)
+    python3 scripts/generate_sar.py --cpus 352 --samples 2833 \
         --interval 30 --minimal -o /tmp/sar_large.txt
 """
 

@@ -1,6 +1,8 @@
-# Phase 2: gaps in the FastAPI (`api/`)
+# Phase 2: gaps in the FastAPI
 
-Phase 1 did not change `api/`. Everything below was either worked around in the
+The API lives in `api/` of
+[jschaef/sarfile_analyzer_ng](https://github.com/jschaef/sarfile_analyzer_ng).
+Phase 1 did not change it. Everything below was either worked around in the
 frontend (marked **workaround**) or left out (marked **missing**). Timings are from
 the synthetic large fixture (352 CPUs, 2 833 samples, ~1 M rows in the CPU
 section) on the 4-vCPU dev container, without Redis.
