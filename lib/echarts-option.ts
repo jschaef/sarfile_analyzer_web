@@ -10,6 +10,9 @@ export const PALETTE = [
   "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
 ];
 
+// Name of the internal series that carries the restart markers.
+export const RESTART_SERIES = "LINUX RESTART";
+
 export type LineChartInput = {
   columns: Columns;
   restarts?: number[];
@@ -28,7 +31,7 @@ export function buildLineOption(input: LineChartInput): EChartsOption {
 
   const source: Record<string, number[]> = { date: columns.x, ...columns.series };
 
-  const series: LineSeriesOption[] = columns.metrics.map((metric, index) => ({
+  const series: LineSeriesOption[] = columns.metrics.map((metric) => ({
     type: "line",
     name: metric,
     encode: { x: "date", y: metric },
@@ -39,18 +42,27 @@ export function buildLineOption(input: LineChartInput): EChartsOption {
     lineStyle: { width: many ? 1 : 1.5 },
     emphasis: { focus: "series" },
     connectNulls: false,
-    ...(index === 0 && restarts.length > 0
-      ? {
-          markLine: {
-            symbol: "none",
-            silent: true,
-            lineStyle: { color: "#d62728", type: "dashed", width: 1.5 },
-            label: { formatter: "LINUX RESTART", color: text, position: "insideEndTop" },
-            data: restarts.map((x) => ({ xAxis: x })),
-          },
-        }
-      : {}),
   }));
+
+  // Restart markers live on their own empty series that is not in the legend:
+  // a markLine disappears together with its series, so attaching it to a metric
+  // would hide the restarts whenever that metric is switched off.
+  if (restarts.length > 0) {
+    series.push({
+      type: "line",
+      name: RESTART_SERIES,
+      data: [],
+      silent: true,
+      tooltip: { show: false },
+      markLine: {
+        symbol: "none",
+        silent: true,
+        lineStyle: { color: "#d62728", type: "dashed", width: 1.5 },
+        label: { formatter: "LINUX RESTART", color: text, position: "insideEndTop" },
+        data: restarts.map((x) => ({ xAxis: x })),
+      },
+    });
+  }
 
   return {
     backgroundColor: "transparent",
@@ -65,6 +77,8 @@ export function buildLineOption(input: LineChartInput): EChartsOption {
       left: 0,
       right: 0,
       textStyle: { color: text },
+      // metrics only - the restart series must not be toggleable
+      data: columns.metrics,
       selected,
     },
     // legend in the first row, toolbox below it - a scrolling legend's pager
@@ -89,6 +103,10 @@ export function buildLineOption(input: LineChartInput): EChartsOption {
     },
     xAxis: {
       type: "time",
+      // fixed to the data range so the axis (and the restart markers) stay
+      // when every metric is switched off
+      min: columns.x[0],
+      max: columns.x[columns.x.length - 1],
       // a sar file covers one day: plain clock times instead of ECharts'
       // default month/day labels at day boundaries
       axisLabel: { color: text, hideOverlap: true, formatter: "{HH}:{mm}" },
