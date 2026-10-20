@@ -1,47 +1,59 @@
-# Phase 2: gaps in the FastAPI
+# API gaps: status after Phase 2
 
-The API lives in `api/` of
-[jschaef/sarfile_analyzer_ng](https://github.com/jschaef/sarfile_analyzer_ng).
-Phase 1 did not change it. Everything below was either worked around in the
-frontend (marked **workaround**) or left out (marked **missing**). Timings are from
-the synthetic large fixture (352 CPUs, 2 833 samples, ~1 M rows in the CPU
-section) on the 4-vCPU dev container, without Redis.
+Phase 1 listed what sarfile_analyzer_ng's FastAPI (`api/` of
+[jschaef/sarfile_analyzer_ng](https://github.com/jschaef/sarfile_analyzer_ng))
+lacked for the frontend. Phase 2 closes those gaps **without changing that
+project**: [sar-web-api](backend/README.md) (`backend/`, `/api/v2`) imports its
+parser read-only and the frontend now talks only to sar-web-api.
+sarfile_analyzer_ng's API keeps running unchanged for its other clients.
 
-| # | Gap | Effect in Phase 1 | Status |
-|---|-----|-------------------|--------|
-| 1 | `GET /files/{name}/headers/{header}` takes the header as a **path parameter**. Aliases or raw headers containing `/` (`I/O and transfer rate`, `rxpck/s …`) return 404 even URL-encoded, because Starlette decodes `%2F` before routing. | Device list unknown for these headers; the chart falls back to the API's default device. Today no multi-device alias contains `/`, so the visible result is the same, but raw (un-aliased) headers would lose their devices. | workaround |
-| 2 | `GET /files/{name}/data` returns **one device per request** and has no "all devices" mode. | Overview of a multi-device header (Block Devices, IFACE, …) costs 1 + N requests, each re-reading and re-splitting the whole parquet. The frontend limits concurrency to 4. | workaround |
-| 3 | `/data` is **slow on large files**: 1.7–13 s for `header=CPU` (the `all` aggregate, only 2 833 rows) on the 1 M-row file, typically 2–7 s (7 calls). `prepare_df_for_pandas` splits every line of the header before filtering the device; nothing is cached between requests. | The CPU card shows a skeleton for several seconds. Statistics cost the same again. | missing |
-| 4 | `/data` JSON is **row-oriented** and carries float32 artefacts (`7.170000076293945`). | 729 KB for the 10-metric CPU chart (2 833 rows); 25.6 MB for 352 per-core series. The frontend converts rows to columns and rounds to 2 decimals. A columnar format (`{"date": [...], "%usr": [...]}`), rounding, Arrow IPC or an optional server-side `max_points` (LTTB) would cut size and parse time. | workaround |
-| 5 | `GET /files/{name}` returns restarts as **raw text lines** (`"12:00:00  LINUX RESTART\t(4 CPU)\n 12:00:00"`), no timestamp field. | Frontend parses the last token as time of day. Note: the Bokeh path inserts zero rows at restarts (`insert_restarts_into_df`), `/data` does not; the ECharts charts draw a dashed marker line instead. | workaround |
-| 6 | No list of **sample timestamps**. Streamlit offers start/end as dropdowns of the real timestamps (`translate_dates_into_list`). | Free `HH:MM:SS` time inputs limited to the file's min/max; the API filters with `>=`/`<=`. Works, but the user cannot see which timestamps exist. | workaround |
-| 7 | No endpoint for the **`device_num`** ("all of N") of CPU-like headers. | Derived from the device list of `/headers/{header}` (one extra request per alias). | workaround |
-| 8 | **Metric descriptions** (`metric` table, the "man pages" tab) are not exposed. | Not shown. | missing |
-| 9 | **Duplicate timestamps** (`dup_bool` / `dup_check`, the "multiple indexes" warning) are not reported by `/data`. | No warning in the new UI. | missing |
-| 10 | No **token revocation / logout**. Tokens are stateless HMAC tokens valid for `SAR_API_TOKEN_TTL` (24 h). | Logout deletes the httpOnly cookie only; a copied token stays valid until it expires. | workaround |
-| 11 | No **combined overview data** endpoint (the JSON twin of `POST /charts/overview`). | The overview is assembled from 2–3 requests per alias. | workaround |
-| 12 | No **combined statistics CSV** ("Generate csv for all statistical data"). `/statistics?format=csv` exists per header. | Not offered in Phase 1. | missing |
-| 13 | `GET /files` has no metadata (host, sar date, OS, time range). | Host/date are parsed from the file name convention `<upload date>_<host>_<sar date>`. | workaround |
-| 14 | No **upload progress for the server-side parse** (upload returns after parsing). | Progress bar covers the transfer; then "Parsing on the server…" without progress. | workaround |
-| 15 | SSO (`/sso/token`, `/sso/validate`) is built for the Streamlit UI redirect (`SAR_UI_BASE_URL`). | Next.js only has the username/password login. | missing |
+Timings: synthetic large fixture (352 CPUs, 2 833 samples, ~1 M rows in the CPU
+section), 4-vCPU dev container, no Redis – details in [PERF.md](PERF.md).
 
-## Frontend-side notes (no API change needed)
+| # | Gap in `/api/v1` | `/api/v2` (sar-web-api) | Status |
+|---|---|---|---|
+| 1 | `/headers/{header}` as a path parameter: aliases with `/` (`I/O and transfer rate`) give 404 | `GET /files/{name}/header?header=` – query parameter; tested with `I/O and transfer rate` (pytest + e2e) | closed |
+| 2 | `/data` returns one device per request | `GET /files/{name}/series` returns every device the Overview shows in one response (`devices=` for `*` or a list) | closed |
+| 3 | `/data` slow on large files (2–7 s per request, parses 1 M rows every time) | per-file and per-header cache (first request 4.7 s, then 0.12 s); parse ~8× faster (10 s → 1.3 s) by collapsing whitespace before the unchanged `get_metrics_from_df`; Overview defaults parsed in the background after an upload | closed |
+| 4 | row-oriented JSON with float32 artefacts (666 KB for the CPU chart) | column-oriented, rounded to 2 decimals (176 KB); optional `max_points` (LTTB per metric, one shared time axis) | closed |
+| 5 | restarts only as raw text | `restarts: [{time, iso, raw}]` in `GET /files/{name}`; 12-hour (AM/PM) lines handled | closed |
+| 6 | no list of sample timestamps | `timestamps` in `GET /files/{name}`; start/end in the UI are now selects of the real sample times, like Streamlit | closed |
+| 7 | no `device_num` ("all of N") | `device_count` in `series` and `header` | closed |
+| 8 | metric descriptions ("man pages") not exposed | `GET /metrics`; "Metrics" tab per chart and descriptions as tooltips in the metric menu | closed |
+| 9 | duplicate timestamps not reported | `duplicates` per series; the card warns like Streamlit's "multiple indexes"; first value kept (`keep='first'`); pytest with a duplicated block | closed |
+| 10 | no token revocation | own session tokens (own secret, `jti`), `POST /logout` puts the `jti` on a SQLite denylist until expiry; the frontend's logout calls it. `/api/v1` tokens and `/api/v2` tokens are not interchangeable | closed |
+| 11 | no combined overview endpoint | one request per alias (gap 2 + 7 merged into `series`). An all-aliases endpoint was left out on purpose: per-alias responses let the page render chart by chart | closed |
+| 12 | no combined statistics CSV ("Generate csv for all statistical data") | `GET /files/{name}/statistics` (per device, pandas `describe()` numbers) exists; no CSV export across charts yet | open |
+| 13 | `GET /files` without metadata | `host`, `sar_date`, `uploaded` from the name convention | closed |
+| 14 | no progress for the server-side parse after upload | unchanged: the upload returns after parsing | open |
+| 15 | SSO built for the Streamlit redirect | not ported; Next.js has username/password login only | open |
 
-- **No CORS change.** The browser only talks to Next.js; `/api/v1/*` is rewritten
-  to the API and `proxy.ts` injects `Authorization: Bearer <token>` from the
+## Still open / new limits
+
+- **Statistics CSV export (12), parse progress (14), SSO (15).**
+- **PDF export** (`POST /api/v1/charts/overview`, Bokeh + Selenium) is not wired
+  into the frontend and was not tested.
+- **Repeated time axis for many devices:** in `series` every device carries its
+  own `x`. For 352 CPUs × 2 833 samples that is most of the 19.7 MB response.
+  A shared `x` when all devices have the same timestamps would shrink it to
+  roughly a third (the 13-digit timestamps outweigh the values);
+  only matters for per-device views of very large hosts, which the Overview does
+  not show.
+- **Cache is per process:** with several uvicorn workers each worker parses and
+  caches on its own (memory × workers). The revocation list is shared (SQLite).
+- **Coupling:** sar-web-api imports internals of sarfile_analyzer_ng (list in
+  [backend/README.md](backend/README.md)), including private helpers
+  (`_parse_bound`, `_validate_file_name`, `_CPU_LIKE`). A refactoring there can
+  break it; `backend/tests` pin the behaviour, including value equality with
+  `/api/v1/.../data` and `/statistics` on the small fixture.
+
+## Frontend-side notes
+
+- **No CORS.** The browser only talks to Next.js; `/api/v2/*` is rewritten to
+  sar-web-api and `proxy.ts` injects `Authorization: Bearer <token>` from the
   httpOnly cookie.
 - **Uploads bypass the rewrite.** Next.js buffers request bodies on
   proxy-matched paths and silently cuts them at 10 MB
-  (`experimental.proxyClientMaxBodySize`). Uploads therefore go through the
-  streaming route handler `app/api/upload`; a direct `POST /api/v1/files` through
-  Next.js is rejected with 405. Verified with the 120 MB large fixture
-  (1 011 381 rows arrived).
-- **PDF export** (`POST /charts/overview`, Bokeh + Selenium) exists in the API but
-  is not wired into Phase 1 and was not tested.
-
-## Suggested order for Phase 2
-
-1. Columnar `/data` with rounding + `devices=all` + optional `max_points` (fixes 2, 3, 4, 11 in one go; biggest effect on large files).
-2. Query-parameter variant of the header details (fixes 1) and `timestamps`/`device_count` in it (6, 7).
-3. Structured restarts in `GET /files/{name}` (5) and `GET /metrics` (8).
-4. Token revocation or short-lived tokens + refresh (10).
+  (`experimental.proxyClientMaxBodySize`). Uploads go through the streaming
+  route handler `app/api/upload`; a direct `POST /api/v2/files` through Next.js
+  is rejected with 405. Verified in Phase 1 with the 120 MB large fixture.
