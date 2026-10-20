@@ -1,20 +1,35 @@
-# ECharts vs BokehJS – render performance
+# Performance: ECharts vs BokehJS, and the API behind them
 
-Question: is Apache ECharts as fast as the current Bokeh path at turning chart
-data into a painted chart in the browser?
+Two questions:
 
-## Method
+1. Is Apache ECharts as fast as the current Bokeh path at turning chart data
+   into a painted chart in the browser?
+2. How long does the data take to arrive – sarfile_analyzer_ng's API (`/api/v1`)
+   vs sar-web-api (`/api/v2`, `backend/`)?
+
+Everything below runs on the synthetic large fixture from
+`scripts/generate_sar.py --cpus 352 --samples 2833 --interval 30 --minimal`
+(120 MB text; 1 000 049 rows in the CPU section; 30 s interval over 23.6 h).
+
+Environment: Intel Xeon @ 2.80 GHz, 4 vCPU, 15 GB RAM, Linux container, no GPU
+(software rendering), no Redis. Chromium 141.0.7390.37 (headless), Playwright
+1.64.1, ECharts 6.1.0, BokehJS 3.8.2 (from the bokeh 3.8.2 Python package),
+Node 22.22, Python 3.13, FastAPI 0.151, pandas 3.0.6, polars 2.0.0.
+
+## 1. Rendering: data available → chart painted
+
+### Method
 
 - **What is timed:** from "data available in the page" to "chart painted".
   The payload is fetched and `JSON.parse`d **before** the clock starts, for both.
-  - **ECharts** (the app's code path): `toColumns()` (API rows → columns, from
-    `lib/sar.ts`) → `echarts.init` (canvas) → `setOption(buildLineOption(...))`
-    (the app's `lib/echarts-option.ts`: LTTB sampling, dataZoom, no animation) →
+  - **ECharts** (the app's code path): `toColumns()` (from `lib/sar.ts`) →
+    `echarts.init` (canvas) → `setOption(buildLineOption(...))` (the app's
+    `lib/echarts-option.ts`: LTTB sampling, dataZoom, no animation) →
     `finished` event → two `requestAnimationFrame`s.
   - **Bokeh** (the Streamlit path): `Bokeh.embed.embed_item(json_item)` → poll
     until every root view reports `has_finished()` → two `requestAnimationFrame`s.
-    The `json_item` comes from the backend's `bokeh_charts.overview_v1(...)` + `json_item()`,
-    which is what `streamlit_bokeh_component.serialize_figure` sends.
+    The `json_item` comes from the backend's `bokeh_charts.overview_v1(...)` +
+    `json_item()`, which is what `streamlit_bokeh_component.serialize_figure` sends.
 - **Same browser for both:** one headless Chromium, a fresh page per measurement,
   1280×900 viewport, chart 1200×400 px, libraries served locally (no CDN).
 - **Runs:** 11 per case. Every run measures all cases, alternating the order
@@ -22,93 +37,103 @@ data into a painted chart in the browser?
   min, max of the painted time.
 - **Correctness check:** each case must produce a `<canvas>` and no page error;
   Bokeh must expose `has_finished()` on its root views. One screenshot per case
-  (`BENCH_SCREENSHOTS`, trial run) was inspected – all six charts show the
-  expected lines.
-- **Data:** synthetic large fixture from `scripts/generate_sar.py --cpus 352
-  --samples 2833 --interval 30 --minimal` (120 MB text; 1 000 049 rows in the CPU
-  section; 30 s interval over 23.6 h), uploaded through the API.
-
-### Scenarios
+  (`BENCH_SCREENSHOTS`) was inspected – the charts show the expected lines.
 
 | Scenario | Data | Bokeh payload | ECharts payload |
 |---|---|---|---|
-| **cpu-overview** – the CPU chart of the Graphical Overview (as requested) | `all` aggregate, 10 metrics × 2 833 samples = 28 330 points | `overview_v1` strides down to 945 rows itself → 9 450 points | (a) **full rows**, exactly as `GET /files/{name}/data?header=CPU` returns them; (b) **Bokeh's rows** – the same 945 rows Bokeh keeps |
-| **cpu-per-core** – stress case beyond the overview | `%usr` of each of the 352 CPUs as its own series = 997 216 points | `overview_v1` → MultiLine, strided to 189 rows → 66 528 points | (a) full rows (25.6 MB JSON); (b) Bokeh's 189 rows |
+| **cpu-overview** – the CPU chart of the Graphical Overview | `all` aggregate, 10 metrics × 2 833 samples = 28 330 points | `overview_v1` strides down to 945 rows itself → 9 450 points | (a) **full rows**: exactly the `GET /api/v2/files/{name}/series?header=CPU` response; (b) **Bokeh's rows**: the same 945 rows Bokeh keeps, same format |
+| **cpu-per-core** – stress case beyond the overview | `%usr` of each of the 352 CPUs as its own series = 997 216 points | `overview_v1` → MultiLine, strided to 189 rows → 66 528 points | (a) full rows: `series?header=CPU&devices=0,…,351&metrics=%usr` (one entry per CPU, merged into one chart in the page); (b) Bokeh's 189 rows |
 
 Case (b) compares the two renderers on identical points. Case (a) is what each
 stack does in practice: Bokeh relies on server-side down-sampling, the ECharts
 frontend receives every row and down-samples with LTTB on the client.
 
-## Results
-
-Environment: Intel Xeon @ 2.80 GHz, 4 vCPU, 15 GB RAM, Linux container, no GPU
-(software rendering). Chromium 141.0.7390.37 (headless), Playwright 1.64.1,
-ECharts 6.1.0, BokehJS 3.8.2 (from the bokeh 3.8.2 Python package), Node 22.22,
-Python 3.13, pandas 3.0.6, polars 2.0.0.
-
-Painted time in ms, 11 runs each:
+### Results (11 runs each, painted time in ms)
 
 | Scenario | Renderer | Points drawn from | Payload | Median | Min | Max |
 |---|---|---|---:|---:|---:|---:|
-| cpu-overview | BokehJS | 9 450 (server-sampled) | 63 KB | **349.7** | 333.6 | 521.2 |
-| cpu-overview | ECharts, full rows | 28 330 | 729 KB | **245.7** | 213.8 | 300.3 |
-| cpu-overview | ECharts, Bokeh's rows | 9 450 | 243 KB | **200.9** | 168.6 | 247.7 |
-| cpu-per-core | BokehJS | 66 528 (server-sampled) | 764 KB | **2 065.6** | 1 739.8 | 2 196.2 |
-| cpu-per-core | ECharts, full rows | 997 216 | 25.6 MB | **1 963.1** | 1 648.2 | 2 208.9 |
-| cpu-per-core | ECharts, Bokeh's rows | 66 528 | 1.7 MB | **722.5** | 583.8 | 802.3 |
+| cpu-overview | BokehJS | 9 450 (server-sampled) | 63 KB | **366.5** | 317.1 | 416.6 |
+| cpu-overview | ECharts, full rows | 28 330 | 176 KB | **233.2** | 183.2 | 333.3 |
+| cpu-overview | ECharts, Bokeh's rows | 9 450 | 58 KB | **184.0** | 150.5 | 309.4 |
+| cpu-per-core | BokehJS | 66 528 (server-sampled) | 764 KB | **1 739.9** | 1 551.6 | 3 253.0 |
+| cpu-per-core | ECharts, full rows | 997 216 | 19.7 MB | **1 634.2** | 1 418.9 | 2 041.7 |
+| cpu-per-core | ECharts, Bokeh's rows | 66 528 | 1.3 MB | **583.4** | 533.9 | 700.3 |
 
-The ECharts numbers include the row→column conversion (median 13.8 ms /
-4.4 ms / 79.2 ms / 17.1 ms in the order of the table).
+The ECharts numbers include building the chart columns from the payload
+(median 0.1–0.4 ms with the column-oriented `/api/v2` data; it was 4–79 ms with
+the row-oriented `/api/v1` data in Phase 1).
 
-The table is the run against the current option builder. Two earlier full runs
-(11 runs each, with earlier versions of the chart option that differ only in
-layout, restart-marker placement and the pinned x-axis range) gave medians of
-321.8 / 216.8 / 167.9 / 1 684.0 / 1 689.7 / 604.8 ms and
-333.7 / 250.6 / 183.3 / 1 786.7 / 1 827.5 / 589.0 ms in the same order. Bokeh's
-side did not change between the runs, yet its medians moved by up to 23 %: on
-this shared machine absolute numbers vary that much between runs. The ordering
-between the cases was the same in all three runs.
+Run-to-run spread: Phase 1 measured the same renderers three times on `/api/v1`
+payloads (11 runs each). Bokeh's side never changed, yet its cpu-overview
+median moved between 321.8 and 349.7 ms and its cpu-per-core median between
+1 684.0 and 2 065.6 ms. Treat differences of 10–20 % between single runs on
+this shared machine as noise. The order of the cpu-overview medians was the
+same in all four runs; in the stress case "ECharts, full rows" and "BokehJS"
+swapped places between runs (twice each), while "ECharts, Bokeh's rows" was
+always the fastest.
 
-### Costs outside the timed span (context, not part of the comparison)
+### What the numbers show
+
+- **CPU overview chart:** ECharts had the lower median in both variants – with
+  the full 28 330 points (233.2 vs 366.5 ms) and with identical 9 450 points
+  (184.0 vs 366.5 ms). In this run the min–max ranges overlap slightly (ECharts'
+  slowest run 333.3 ms, Bokeh's fastest 317.1 ms); in the three Phase 1 runs
+  they did not overlap.
+- **~1 M points (stress case):** ECharts with all 997 216 points (median
+  1 634.2 ms) and BokehJS with its server-sampled 66 528 points (median
+  1 739.9 ms) are within each other's min–max range. On identical points ECharts
+  was faster (583.4 vs 1 739.9 ms).
+- The full-rows ECharts variant needs a 19.7 MB response for the stress case
+  (every CPU repeats the time axis); transfer and `JSON.parse` of that are not
+  in the timed span.
+
+### Costs outside the timed span
 
 | Step | Where | Measured |
 |---|---|---|
-| `overview_v1` figure build + `json_item` serialisation, cpu-overview | Python (Streamlit/API server) | 84.5 ms + 50.5 ms |
-| same, cpu-per-core | Python | 175.7 ms + 243.2 ms |
-| `GET /files/{name}/data?header=CPU` on the large file | FastAPI | 1.7–13 s, typically 2–7 s (7 calls) |
+| `overview_v1` figure build + `json_item` serialisation, cpu-overview | Python (Streamlit/API server) | 155.1 ms + 57.1 ms |
+| same, cpu-per-core | Python | 137.5 ms + 298.6 ms |
 | Network transfer of the payload | – | not measured (local) |
 
-The Bokeh path pays the figure build on the server; the ECharts path pays a
-larger payload (row-oriented JSON with float32 artefacts, see
-[PHASE2-API-GAPS.md](PHASE2-API-GAPS.md) #3/#4). On the large file the API
-response time is an order of magnitude larger than either renderer.
+## 2. API: request → response
 
-## What the numbers show
+`perf/api_timing.py`, both services freshly started against the same
+`UPLOAD_DIR`, 5 requests each, the CPU data of the Graphical Overview:
 
-- **CPU overview chart (the requested case):** ECharts painted faster than
-  BokehJS in both variants – with the full 28 330 points (median 245.7 vs
-  349.7 ms) and with identical 9 450 points (200.9 vs 349.7 ms). The ranges
-  do not overlap.
-- **~1 M points (stress case):** ECharts with all 997 216 points (median
-  1 963.1 ms) and BokehJS with its server-sampled 66 528 points (median
-  2 065.6 ms) are within each other's min–max range. On identical points ECharts
-  was faster (722.5 vs 2 065.6 ms).
-- The full-rows ECharts variant needs a 25.6 MB JSON for the stress case;
-  that cost (transfer + `JSON.parse`) is not in the timed span.
+| | Request | 1st | Requests 2–5 (median) | Response |
+|---|---|---:|---:|---:|
+| sarfile_analyzer_ng API | `GET /api/v1/files/{name}/data?header=CPU` | 7.67 s | 2.08 s | 666 KB |
+| sar-web-api | `GET /api/v2/files/{name}/series?header=CPU` | 4.69 s | 0.12 s | 176 KB |
+
+- `/api/v1` parses the whole CPU section (1 M rows) on every request.
+- `/api/v2`'s first request loads the parquet and parses the header (1.3 s of
+  that is the parse, see below), then serves from its cache. After an upload it
+  parses the five Overview default headers in the background, so the first page
+  view after an upload does not pay the cold cost either.
+- The parse itself is ~8× faster in `/api/v2` (10 s → 1.3 s for the CPU section):
+  whitespace in the data column is collapsed before calling the unchanged
+  `get_metrics_from_df` (see [backend/README.md](backend/README.md)).
+
+Measured in-process on the same file (data layer only, cache warm): all 352
+per-core `%usr` series in one request 0.6 s; statistics of the CPU header 0.3 s.
+With `/api/v1` the per-core view would be 352 requests of ~2 s each.
 
 Not covered: many charts on one page at once, interaction (zoom/pan/hover)
 latency, memory use, real (non-synthetic) data of this size, GPU-accelerated
-browsers, Firefox/Safari.
+browsers, Firefox/Safari, Redis enabled, concurrent users.
 
 ## Reproduce
 
 ```bash
-# API running with UPLOAD_DIR set, large fixture uploaded as user admin
 python3 scripts/generate_sar.py --cpus 352 --samples 2833 --interval 30 --minimal -o /tmp/sar_large.txt
-# (upload /tmp/sar_large.txt via the UI or POST /api/v1/files)
-# export_payloads.py imports the backend (default ../sarfile_analyzer_ng) - use its venv
-SAR_BACKEND_DIR=../sarfile_analyzer_ng UPLOAD_DIR=... \
-  ../sarfile_analyzer_ng/.venv/bin/python perf/export_payloads.py --file <uploaded name> --out perf/out
+# upload /tmp/sar_large.txt as user admin via the UI (or POST /api/v2/files)
+
+# 1. rendering (venv of sarfile_analyzer_ng, SAR_BACKEND_DIR if not ../sarfile_analyzer_ng)
+UPLOAD_DIR=... python perf/export_payloads.py --file <uploaded name> --out perf/out
 PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome npm run bench -- perf/out 11
 # BENCH_SCREENSHOTS=<dir> keeps one screenshot per case
+
+# 2. API: start sarfile_analyzer_ng's API on :8100 and sar-web-api on :8200
+#    (same UPLOAD_DIR), then right away
+python3 perf/api_timing.py --file <uploaded name> --runs 5
 ```

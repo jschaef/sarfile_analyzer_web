@@ -8,7 +8,7 @@
 // Set PLAYWRIGHT_CHROMIUM_EXECUTABLE to use a preinstalled Chromium.
 //
 // Timed span per run (t0 -> t2):
-//   ECharts: t0 before toColumns(API rows) -> echarts.init -> setOption ->
+//   ECharts: t0 before toColumns(sar-web-api series) -> echarts.init -> setOption ->
 //            'finished' event -> two animation frames
 //   Bokeh:   t0 before Bokeh.embed.embed_item(json_item) -> all views
 //            finished -> two animation frames
@@ -59,7 +59,16 @@ window.bench = async (url) => {
   await frame();
   const el = document.getElementById("chart");
   const t0 = performance.now();
-  const columns = toColumns(payload.data);
+  // one series entry: the app's own path (lib/sar.ts). Several entries (the
+  // per-core stress case, one entry per CPU): merged into one chart here.
+  const columns =
+    payload.series.length === 1
+      ? toColumns(payload.series[0], payload.metrics)
+      : {
+          x: payload.series[0].x,
+          metrics: payload.series.map((s) => s.device),
+          series: Object.fromEntries(payload.series.map((s) => [s.device, s.values[payload.metrics[0]]])),
+        };
   const t_conv = performance.now();
   const chart = echarts.init(el, null, { renderer: "canvas" });
   const finished = new Promise((r) => chart.on("finished", r));
