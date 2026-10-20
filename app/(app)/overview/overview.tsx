@@ -7,16 +7,17 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, type FileInfo, type SarFile } from "@/lib/api";
-import { DEFAULT_OVERVIEW_ALIASES, restartTimes, timeOfDay } from "@/lib/sar";
+import { DEFAULT_OVERVIEW_ALIASES, clockTime } from "@/lib/sar";
 import { cn } from "@/lib/utils";
 import { AliasSection } from "./alias-section";
 
 // Above this many diagrams the page gets heavy (dia_overview_pl warns too).
 const MANY_ALIASES = 20;
+
+const SELECT_CLASS = "h-8 rounded-lg border border-input bg-background px-2 text-sm dark:bg-input/30";
 
 type TimeRange = { start: string; end: string };
 
@@ -28,12 +29,18 @@ export function Overview() {
   const [files, setFiles] = useState<SarFile[] | null>(null);
   const [info, setInfo] = useState<FileInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // metric descriptions ("man pages"), the same for every file
+  const [descriptions, setDescriptions] = useState<Record<string, string>>({});
 
   useEffect(() => {
     api
       .listFiles()
       .then(setFiles)
       .catch((e: Error) => setError(e.message));
+    api
+      .metrics()
+      .then(setDescriptions)
+      .catch(() => setDescriptions({}));
   }, []);
 
   const fileName = fileParam ?? files?.[0]?.name ?? null;
@@ -85,7 +92,7 @@ export function Overview() {
           <select
             id="file-select"
             data-testid="file-select"
-            className="h-8 rounded-lg border border-input bg-background px-2 text-sm dark:bg-input/30"
+            className={SELECT_CLASS}
             value={fileName ?? ""}
             onChange={(event) => selectFile(event.target.value)}
             disabled={!files}
@@ -110,13 +117,13 @@ export function Overview() {
         !error && <Skeleton className="h-48 w-full" />
       ) : (
         // keyed by file: switching files starts from a clean selection
-        <OverviewForFile key={info.name} info={info} />
+        <OverviewForFile key={info.name} info={info} descriptions={descriptions} />
       )}
     </div>
   );
 }
 
-function OverviewForFile({ info }: { info: FileInfo }) {
+function OverviewForFile({ info, descriptions }: { info: FileInfo; descriptions: Record<string, string> }) {
   // Ascending, like the pills in dia_overview_pl.metric_expander. This order
   // (not the click order) decides the order of the diagrams (sel_order_map).
   const options = useMemo(() => [...new Set(info.headers.map((h) => h.alias))].sort(), [info]);
@@ -125,13 +132,14 @@ function OverviewForFile({ info }: { info: FileInfo }) {
   );
   const selected = options.filter((alias) => chosen.has(alias));
 
-  const fullRange: TimeRange = { start: timeOfDay(info.start), end: timeOfDay(info.end) };
+  // the file's real sample times, like the start/end selectboxes in Streamlit
+  const times = useMemo(() => [...new Set(info.timestamps.map(clockTime))], [info]);
+  const fullRange: TimeRange = { start: times[0] ?? "00:00:00", end: times.at(-1) ?? "23:59:59" };
   const [draft, setDraft] = useState<TimeRange>(fullRange);
   const [range, setRange] = useState<TimeRange>(fullRange);
   const [shown, setShown] = useState(false);
 
-  const restarts = useMemo(() => restartTimes(info.restarts, info.start), [info]);
-  const rangeError = draft.start > draft.end ? "Start must not be after end" : null;
+  const restarts = useMemo(() => info.restarts.map((r) => r.time), [info]);
   const isFullRange = range.start === fullRange.start && range.end === fullRange.end;
 
   function toggle(alias: string) {
@@ -144,7 +152,6 @@ function OverviewForFile({ info }: { info: FileInfo }) {
   }
 
   function show() {
-    if (rangeError) return;
     setRange(draft);
     setShown(true);
   }
@@ -203,39 +210,49 @@ function OverviewForFile({ info }: { info: FileInfo }) {
           )}
 
           <div className="flex flex-wrap items-end gap-4 border-t pt-4">
-            <div className="space-y-1.5">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="start-time">
                 <ClockIcon className="size-3.5" /> Start time
               </Label>
-              <Input
+              <select
                 id="start-time"
-                type="time"
-                step={1}
-                min={fullRange.start}
-                max={fullRange.end}
+                className={SELECT_CLASS}
                 value={draft.start}
-                onChange={(event) => setDraft({ ...draft, start: event.target.value })}
-                className="w-36"
-              />
+                onChange={(event) => {
+                  const start = event.target.value;
+                  // end offers only times from the start on, as in Streamlit
+                  setDraft({ start, end: draft.end < start ? fullRange.end : draft.end });
+                }}
+              >
+                {times.map((time) => (
+                  <option key={time} value={time}>
+                    {time}
+                  </option>
+                ))}
+              </select>
             </div>
-            <div className="space-y-1.5">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="end-time">End time</Label>
-              <Input
+              <select
                 id="end-time"
-                type="time"
-                step={1}
-                min={fullRange.start}
-                max={fullRange.end}
+                className={SELECT_CLASS}
                 value={draft.end}
                 onChange={(event) => setDraft({ ...draft, end: event.target.value })}
-                className="w-36"
-              />
+              >
+                {times
+                  .filter((time) => time >= draft.start)
+                  .map((time) => (
+                    <option key={time} value={time}>
+                      {time}
+                    </option>
+                  ))}
+              </select>
             </div>
             <Button variant="ghost" size="sm" onClick={() => setDraft(fullRange)}>
               Full day
             </Button>
             <div className="ml-auto flex gap-2">
-              <Button onClick={show} disabled={selected.length === 0 || !!rangeError} data-testid="show-diagrams">
+              <Button onClick={show} disabled={selected.length === 0} data-testid="show-diagrams">
                 <BarChart3Icon /> {shown ? "Update diagrams" : "Show diagrams"}
               </Button>
               {shown && (
@@ -245,7 +262,6 @@ function OverviewForFile({ info }: { info: FileInfo }) {
               )}
             </div>
           </div>
-          {rangeError && <p className="text-sm text-destructive">{rangeError}</p>}
           <p className="text-xs text-muted-foreground">
             Data from {info.start} to {info.end}
             {restarts.length > 0 && ` · ${restarts.length} restart(s), shown as dashed red line`}. Zoom with
@@ -269,6 +285,7 @@ function OverviewForFile({ info }: { info: FileInfo }) {
               start={isFullRange ? undefined : range.start}
               end={isFullRange ? undefined : range.end}
               restarts={restarts}
+              descriptions={descriptions}
             />
           ))}
           <a href="#" className={buttonVariants({ variant: "ghost", size: "sm" })}>

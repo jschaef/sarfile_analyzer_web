@@ -29,7 +29,7 @@ export function buildLineOption(input: LineChartInput): EChartsOption {
   const grid = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
   const many = columns.metrics.length > 12;
 
-  const source: Record<string, number[]> = { date: columns.x, ...columns.series };
+  const source: Record<string, (number | null)[]> = { date: columns.x, ...columns.series };
 
   const series: LineSeriesOption[] = columns.metrics.map((metric) => ({
     type: "line",

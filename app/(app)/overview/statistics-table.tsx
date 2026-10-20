@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { api, type StatisticsResponse } from "@/lib/api";
+import { api } from "@/lib/api";
 import { apiLimit } from "@/lib/limit";
 
 type Props = { file: string; alias: string; device: string | null; start?: string; end?: string };
@@ -17,13 +17,14 @@ function format(value: number | null | undefined): string {
 }
 
 export function StatisticsTable({ file, alias, device, start, end }: Props) {
-  const [stats, setStats] = useState<StatisticsResponse | null>(null);
+  const [stats, setStats] = useState<Record<string, Record<string, number | null>> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    apiLimit(() => api.statistics(file, { header: alias, device, start, end }, controller.signal))
-      .then(setStats)
+    const params = { header: alias, devices: device ?? undefined, start, end };
+    apiLimit(() => api.statistics(file, params, controller.signal))
+      .then((response) => setStats(response.series[0]?.statistics ?? {}))
       .catch((e: Error) => {
         if (e.name !== "AbortError") setError(e.message);
       });
@@ -33,7 +34,7 @@ export function StatisticsTable({ file, alias, device, start, end }: Props) {
   if (error) return <p className="text-sm text-destructive">{error}</p>;
   if (!stats) return <Skeleton className="h-48 w-full" />;
 
-  const metrics = Object.keys(stats.statistics);
+  const metrics = Object.keys(stats);
   return (
     <div className="max-h-[380px] overflow-auto" data-testid="statistics-table">
       <Table>
@@ -53,7 +54,7 @@ export function StatisticsTable({ file, alias, device, start, end }: Props) {
               <TableCell className="font-mono text-xs">{metric}</TableCell>
               {STATS.map((stat) => (
                 <TableCell key={stat} className="text-right tabular-nums">
-                  {format(stats.statistics[metric][stat])}
+                  {format(stats[metric][stat])}
                 </TableCell>
               ))}
             </TableRow>

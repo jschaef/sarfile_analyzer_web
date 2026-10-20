@@ -17,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api, type SarFile } from "@/lib/api";
-import { describeFileName, formatBytes } from "@/lib/format";
+import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function FileManager() {
@@ -181,53 +181,50 @@ export function FileManager() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {files.map((file) => {
-                  const parts = describeFileName(file.name);
-                  return (
-                    <TableRow key={file.name} data-testid="file-row" data-file={file.name}>
-                      <TableCell className="font-mono text-xs">{file.name}</TableCell>
-                      <TableCell>{parts?.host ?? "–"}</TableCell>
-                      <TableCell>{parts?.sarDate ?? "–"}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatBytes(file.size_bytes)}</TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-2">
-                          <Link
-                            href={`/overview?file=${encodeURIComponent(file.name)}`}
-                            className={buttonVariants({ variant: "outline", size: "sm" })}
-                          >
-                            <BarChart3Icon /> Overview
-                          </Link>
-                          {confirming === file.name ? (
-                            <>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => void remove(file.name)}
-                                disabled={deleting === file.name}
-                                data-testid="confirm-delete"
-                              >
-                                {deleting === file.name ? "Deleting…" : "Confirm"}
-                              </Button>
-                              <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
-                                Cancel
-                              </Button>
-                            </>
-                          ) : (
+                {files.map((file) => (
+                  <TableRow key={file.name} data-testid="file-row" data-file={file.name}>
+                    <TableCell className="font-mono text-xs">{file.name}</TableCell>
+                    <TableCell>{file.host ?? "–"}</TableCell>
+                    <TableCell>{file.sar_date ?? "–"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatBytes(file.size_bytes)}</TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-2">
+                        <Link
+                          href={`/overview?file=${encodeURIComponent(file.name)}`}
+                          className={buttonVariants({ variant: "outline", size: "sm" })}
+                        >
+                          <BarChart3Icon /> Overview
+                        </Link>
+                        {confirming === file.name ? (
+                          <>
                             <Button
-                              variant="ghost"
+                              variant="destructive"
                               size="sm"
-                              onClick={() => setConfirming(file.name)}
-                              aria-label={`Delete ${file.name}`}
-                              data-testid="delete-file"
+                              onClick={() => void remove(file.name)}
+                              disabled={deleting === file.name}
+                              data-testid="confirm-delete"
                             >
-                              <Trash2Icon />
+                              {deleting === file.name ? "Deleting…" : "Confirm"}
                             </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                            <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
+                              Cancel
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setConfirming(file.name)}
+                            aria-label={`Delete ${file.name}`}
+                            data-testid="delete-file"
+                          >
+                            <Trash2Icon />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           )}
