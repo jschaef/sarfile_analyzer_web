@@ -6,6 +6,11 @@ import { api, type Info } from "@/lib/api";
 
 let infoRequest: Promise<Info> | null = null;
 
+// after an admin changed the settings
+export function refreshInfo() {
+  infoRequest = null;
+}
+
 // /api/v2/info works without a session; loaded once per page load.
 export function useInfo(): Info | null {
   const [info, setInfo] = useState<Info | null>(null);

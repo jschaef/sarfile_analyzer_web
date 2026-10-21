@@ -9,6 +9,7 @@ const ADMIN_VIEWS = [
   { href: "/admin/users", label: "User Management" },
   { href: "/admin/database", label: "DB Management" },
   { href: "/admin/redis", label: "Redis Management" },
+  { href: "/admin/settings", label: "Settings" },
 ];
 
 export function AdminNav() {

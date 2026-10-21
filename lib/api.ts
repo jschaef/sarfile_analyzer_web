@@ -92,6 +92,20 @@ export type Info = {
   code_url: string;
   web_code_url: string;
   signup: boolean;
+  max_header_count: number;
+};
+
+export type Setting = {
+  name: string;
+  type: "str" | "int" | "bool";
+  min: number | null;
+  max: number | null;
+  env_var: string;
+  // admin: stored in settings.json; environment/default: from config.py
+  source: "admin" | "environment" | "default";
+  secret: boolean;
+  // for a secret only whether one is set
+  value: string | number | boolean;
 };
 
 export type UserEntry = { username: string; role: string };
@@ -197,6 +211,10 @@ export const api = {
       send("PUT", "/admin/headers", { ...entry, original_header }),
     deleteHeader: (header: string) => send("DELETE", `/admin/headers?${query({ header })}`),
     redis: () => get<RedisResponse>("/admin/redis"),
+    settings: () => get<{ settings: Setting[] }>("/admin/settings").then((r) => r.settings),
+    // null removes the admin value (back to the environment)
+    updateSettings: (values: Record<string, string | number | boolean | null>) =>
+      send<{ settings: Setting[] }>("PUT", "/admin/settings", { values }).then((r) => r.settings),
     deleteRedisFields: (key: string, fields: string[]) =>
       send<{ deleted: number }>("DELETE", `/admin/redis/fields?${query({ key })}&${repeated("field", fields)}`),
   },
