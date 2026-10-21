@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import { useMemo, useState } from "react";
 import { DataTable } from "@/components/analyze/data-table";
 import { FilePicker, NoFiles, PageTitle, SELECT_CLASS } from "@/components/analyze/file-picker";
+import { useInfo } from "@/components/help-note";
 import { ResultTabs } from "@/components/analyze/result-tabs";
 import { StatisticsTable } from "@/components/analyze/statistics-table";
 import { LineChart } from "@/components/charts/line-chart";
@@ -19,9 +20,9 @@ import { useFileInfo, useMetricDescriptions, useRequest, useSelectedFile } from 
 import { apiLimit } from "@/lib/limit";
 import { sortDevices } from "@/lib/sar";
 
-// Up to six header/device/metric combinations in one chart, like the Streamlit
-// page "Compare Metrics" (config.max_header_count).
-const MAX_SLOTS = 6;
+// Up to max_header_count (Admin > Settings, default 6) header/device/metric
+// combinations in one chart, like the Streamlit page "Compare Metrics".
+const DEFAULT_MAX_SLOTS = 6;
 const DEFAULT_SLOTS = 3;
 
 type Slot = { alias: string; device: string | null; metric: string };
@@ -59,7 +60,8 @@ function CompareForFile({ info, descriptions }: { info: FileInfo; descriptions: 
   const headers = useMemo(() => [...info.headers].sort((a, b) => a.alias.localeCompare(b.alias)), [info]);
   const metricsOf = (alias: string) => headers.find((h) => h.alias === alias)?.metrics ?? [];
   // like the Streamlit defaults: the first heading, different metrics per slot
-  const [slots, setSlots] = useState<Slot[]>(() => {
+  const maxSlots = useInfo()?.max_header_count ?? DEFAULT_MAX_SLOTS;
+  const [allSlots, setSlots] = useState<Slot[]>(() => {
     const first = headers[0];
     return Array.from({ length: Math.min(DEFAULT_SLOTS, first.metrics.length) }, (_, i) => ({
       alias: first.alias,
@@ -67,6 +69,8 @@ function CompareForFile({ info, descriptions }: { info: FileInfo; descriptions: 
       metric: first.metrics[i],
     }));
   });
+  // a lowered maximum hides the slots beyond it
+  const slots = allSlots.slice(0, maxSlots);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const restarts = useMemo(() => info.restarts.map((r) => r.time), [info]);
 
@@ -127,7 +131,7 @@ function CompareForFile({ info, descriptions }: { info: FileInfo; descriptions: 
       <Card>
         <CardHeader>
           <CardTitle>Metrics to compare</CardTitle>
-          <CardDescription>Up to {MAX_SLOTS} combinations of heading, device and metric.</CardDescription>
+          <CardDescription>Up to {maxSlots} combinations of heading, device and metric.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {slots.map((slot, index) => {
@@ -208,8 +212,8 @@ function CompareForFile({ info, descriptions }: { info: FileInfo; descriptions: 
           <Button
             variant="outline"
             size="sm"
-            disabled={slots.length >= MAX_SLOTS}
-            onClick={() => setSlots((current) => [...current, { ...current[current.length - 1], device: null }])}
+            disabled={slots.length >= maxSlots}
+            onClick={() => setSlots([...slots, { ...slots[slots.length - 1], device: null }])}
             data-testid="add-slot"
           >
             <PlusIcon /> Add metric

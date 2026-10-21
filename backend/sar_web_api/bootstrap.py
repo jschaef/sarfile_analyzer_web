@@ -30,3 +30,34 @@ if str(BACKEND_DIR) not in sys.path:
 # puts code/ on sys.path and defaults UPLOAD_DIR to code/upload - set
 # UPLOAD_DIR explicitly so this service shares the storage of the main API
 from api import bootstrap as _backend_bootstrap  # noqa: E402,F401
+
+
+def use_database(path: str | os.PathLike) -> None:
+    """Point sarfile_analyzer_ng's sql_stuff at another data.db.
+
+    sql_stuff finds code/data.db next to itself and binds a module-level engine
+    and session at import time; sqlite2_polars reads `sql_stuff.data_db` on
+    every refresh. Rebinding those globals is enough - the checkout's
+    data.db is not opened for writing. Used by the tests (a copy of the seed
+    DB) and by SAR_WEB_DB.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    import sql_stuff
+    import sqlite2_polars
+
+    db = Path(path).resolve()
+    if not db.is_file():
+        raise RuntimeError(f"SAR_WEB_DB: {db} does not exist")
+    sql_stuff.session.close()
+    sql_stuff.data_db = str(db)
+    sql_stuff.engine = create_engine(f"sqlite:///{db}", connect_args={"check_same_thread": False})
+    sql_stuff.Session = sessionmaker(bind=sql_stuff.engine)
+    sql_stuff.session = sql_stuff.Session()
+    # the parquet copies in UPLOAD_DIR/config may come from another data.db
+    sqlite2_polars.refresh_all_tables()
+
+
+if os.environ.get("SAR_WEB_DB"):
+    use_database(os.environ["SAR_WEB_DB"])

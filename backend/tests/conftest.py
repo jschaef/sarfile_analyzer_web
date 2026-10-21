@@ -2,11 +2,13 @@
 
 Needs the sarfile_analyzer_ng checkout (SAR_BACKEND_DIR, default
 ../../sarfile_analyzer_ng relative to this directory's repo) and its venv.
-Uses the seed login admin/password from that checkout's code/data.db
-(read-only).
+Works on a copy of that checkout's code/data.db (seed login admin/password)
+and fails if the original changed during the run.
 """
 
+import hashlib
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -21,9 +23,23 @@ os.environ["REDIS_ENABLED"] = "false"
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from sar_web_api import bootstrap  # noqa: E402
+
+SEED_DB = bootstrap.BACKEND_DIR / "code" / "data.db"
+_SEED_HASH = hashlib.sha256(SEED_DB.read_bytes()).hexdigest()
+TEST_DB = _TMP / "data.db"
+shutil.copyfile(SEED_DB, TEST_DB)
+bootstrap.use_database(TEST_DB)
+
 from fastapi.testclient import TestClient  # noqa: E402
 
 from sar_web_api.main import app  # noqa: E402
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if hashlib.sha256(SEED_DB.read_bytes()).hexdigest() != _SEED_HASH:
+        session.exitstatus = 1
+        print(f"\nERROR: the tests changed {SEED_DB}")
 
 FIXTURE = Path(__file__).resolve().parents[2] / "e2e" / "fixtures" / "sar_small.txt"
 USER, PASSWORD = "admin", "password"

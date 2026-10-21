@@ -45,6 +45,17 @@ for (const scheme of ["light", "dark"] as const) {
     await page.getByLabel("Heading 2").selectOption("Load");
     await shot("compare", "compare-card");
 
+    await page.goto("/admin/users");
+    await expect(page.getByTestId("login-row").first()).toBeVisible();
+    await page.screenshot({ path: path.join(outDir!, `admin-users-${scheme}-${width}.png`), fullPage: true });
+    await page.goto("/admin/database");
+    await expect(page.getByTestId("metric-row").first()).toBeVisible();
+    await page.screenshot({ path: path.join(outDir!, `admin-database-${scheme}-${width}.png`) });
+
+    await page.goto("/admin/settings");
+    await expect(page.getByTestId("settings-group")).toHaveCount(3);
+    await page.screenshot({ path: path.join(outDir!, `admin-settings-${scheme}-${width}.png`), fullPage: true });
+
     await deleteFile(page, name);
   });
 }

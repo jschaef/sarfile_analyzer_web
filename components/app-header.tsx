@@ -1,6 +1,6 @@
 "use client";
 
-import { ActivityIcon, LogOutIcon } from "lucide-react";
+import { ActivityIcon, LogOutIcon, UserIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -13,17 +13,20 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/overview", label: "Analyze", active: isAnalyzePath },
   { href: "/files", label: "Manage SAR Files", active: (path: string) => path.startsWith("/files") },
+  // only shown to admins; the API checks the role on every admin request
+  { href: "/admin/users", label: "Admin", active: (path: string) => path.startsWith("/admin"), admin: true },
+  { href: "/info", label: "Info", active: (path: string) => path.startsWith("/info") },
 ];
 
 export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<string | null>(null);
+  const [user, setUser] = useState<{ username: string; role: string } | null>(null);
 
   useEffect(() => {
     api
       .me()
-      .then((me) => setUser(me.username))
+      .then(setUser)
       .catch(() => setUser(null));
   }, []);
 
@@ -41,7 +44,7 @@ export function AppHeader() {
           SAR Analyzer
         </Link>
         <nav className="flex items-center gap-1" aria-label="Main">
-          {NAV.map((item) => (
+          {NAV.filter((item) => !item.admin || user?.role === "admin").map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -56,9 +59,17 @@ export function AppHeader() {
         </nav>
         <div className="ml-auto flex items-center gap-2">
           {user && (
-            <span className="text-sm text-muted-foreground" data-testid="current-user">
-              {user}
-            </span>
+            <Link
+              href="/account"
+              title="Self Service"
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                pathname.startsWith("/account") && "bg-muted text-foreground",
+              )}
+            >
+              <UserIcon className="size-4" />
+              <span data-testid="current-user">{user.username}</span>
+            </Link>
           )}
           <ThemeToggle />
           <Button variant="outline" size="sm" onClick={logout} data-testid="logout">

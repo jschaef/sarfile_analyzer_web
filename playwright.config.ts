@@ -6,9 +6,10 @@ import { defineConfig, devices } from "@playwright/test";
 // checkout (SAR_BACKEND_DIR, default ../sarfile_analyzer_ng), its venv on the
 // PATH and UPLOAD_DIR / SAR_WEB_API_SECRET in the environment. Set
 // SAR_E2E_SKIP_API=1 to never start the API from here, or SAR_E2E_API_CMD to
-// change how it is started.
-const apiCommand =
-  process.env.SAR_E2E_API_CMD ?? "uvicorn sar_web_api.main:app --host 127.0.0.1 --port 8200";
+// change how it is started. The default command runs the API on a temporary
+// copy of the seed data.db: the account tests sign up users and edit tables.
+// A reused, already running API must therefore never be a production one.
+const apiCommand = process.env.SAR_E2E_API_CMD ?? "python -m sar_web_api.e2e_server --port 8200";
 const port = Number(process.env.PORT ?? 3100);
 
 export default defineConfig({

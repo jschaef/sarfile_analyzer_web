@@ -84,6 +84,16 @@ def forget(username: str, name: str) -> None:
     _headers.drop(lambda key: key[:2] == (username, name))
 
 
+def forget_user(username: str) -> None:
+    _files.drop(lambda key: key[0] == username)
+    _headers.drop(lambda key: key[0] == username)
+
+
+def forget_headings() -> None:
+    """Header/alias resolution depends on the headings table."""
+    _headers.drop(lambda key: True)
+
+
 def load(username: str, name: str) -> pl.DataFrame:
     key = _version(username, name)
     return _files.get_or_compute(key, lambda: services.load_df(username, name))

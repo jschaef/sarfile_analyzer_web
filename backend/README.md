@@ -4,8 +4,9 @@ The API the Next.js frontend talks to (prefix `/api/v2`). It does not
 re-implement sar parsing: it imports the modules of a
 [sarfile_analyzer_ng](https://github.com/jschaef/sarfile_analyzer_ng) checkout
 (read-only, never modified) and shares that project's storage (`UPLOAD_DIR`)
-and user DB (`code/data.db`, read-only). sarfile_analyzer_ng's own API
-(`/api/v1`) keeps running unchanged next to it.
+and database (`code/data.db`: users, metric descriptions, headings).
+sarfile_analyzer_ng's own API (`/api/v1`) and Streamlit app keep running
+unchanged next to it.
 
 ## Run
 
@@ -19,11 +20,14 @@ uvicorn sar_web_api.main:app --host 127.0.0.1 --port 8200
 ```
 
 OpenAPI docs: `http://127.0.0.1:8200/docs`. Tests: `python -m pytest` (uses a
-temporary `UPLOAD_DIR` and the checked-in small fixture).
+temporary `UPLOAD_DIR`, a temporary copy of the checkout's `code/data.db` and
+the checked-in small fixture; the run fails if the original `data.db` changed).
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `SAR_BACKEND_DIR` | `../sarfile_analyzer_ng` next to this repo | checkout whose `code/` and `api/` are imported |
+| `SAR_WEB_DB` | `code/data.db` of the checkout | another data.db (users, metrics, headings) – for tests and local trials; give it its own `UPLOAD_DIR` (the parquet copies of the tables live in `$UPLOAD_DIR/config`) |
+| `SAR_WEB_SIGNUP` | `true` | `false` turns off `POST /signup` (accounts only through an admin) |
 | `UPLOAD_DIR` | `code/upload` of the checkout | per-user file storage, shared with sarfile_analyzer_ng |
 | `SAR_WEB_API_SECRET` | random per process (warning) | HMAC secret for session tokens; set it so sessions survive restarts |
 | `SAR_WEB_API_TOKEN_TTL` | `43200` (12 h) | session lifetime in seconds |
@@ -52,6 +56,23 @@ the caches to the host.
 | GET | `/files/{name}/statistics?header=` | pandas-`describe()` numbers per device |
 | GET | `/files/{name}/threshold?header=&metric=` | devices where `metric` lies in `min`..`max` (options below) |
 | GET | `/metrics` | description per sar metric (the Streamlit "man pages") |
+| GET | `/info` | admin contact (`ADMIN_EMAIL`, `ADMIN_COMMUNICATION`), code links, whether signup is on – no login |
+| POST | `/signup` | new account with role `user` – no login; `SAR_WEB_SIGNUP=false` → 403 |
+| PUT | `/users/me/password` | change your own password (`current_password`, `new_password`) |
+| GET | `/admin/users` | users with role, available roles, login counter |
+| PUT | `/admin/users/{user}/role` · `/password` | set role / password of a user |
+| DELETE | `/admin/users/{user}` | delete the user and their upload directory |
+| GET · DELETE | `/admin/logins` | login history (newest first, `limit`) · delete records older than `before=YYYY-MM-DD` |
+| GET · POST · DELETE | `/admin/metrics` | metric descriptions · add · delete (`?metric=a&metric=b`) |
+| GET · POST · PUT · DELETE | `/admin/headers` | headings (header, alias, keyword, description) · add · update (`original_header`) · delete (`?header=`) |
+| GET · DELETE | `/admin/redis` · `/admin/redis/fields` | Redis keys with hash fields · delete fields of a hash |
+| GET · PUT | `/admin/settings` | runtime settings of `config.py` with their source (`admin`, `environment`, `default`); PUT `{"values": {name: value}}`, `null` removes the stored value. Secrets (Redis password) are never returned. 501 with a sarfile_analyzer_ng older than `config.EDITABLE_SETTINGS` |
+
+`/admin/*` needs the role `admin`. The role is read from data.db on every
+request (a role change applies without a new login), and every request checks
+that the user still exists (a deleted user's tokens stop working at once).
+An admin cannot take away their own admin role or delete their own account,
+so there is always an admin left.
 
 `series` options: `devices` (omitted = what the Graphical Overview shows:
 CPU-like → `all`, other device headers → every device; `*` = every device;
@@ -83,6 +104,38 @@ optional `start`/`end` it returns `matches` (total), `devices` (`device`,
 (`time`, `device`, `value`, sorted by time and device) cut at `limit`
 (default 500, `0` = only the per-device summary), plus `rows_returned`.
 
+## Writing to data.db
+
+The account and admin endpoints (`sar_web_api/accounts.py`) write through the
+same functions as the Streamlit pages Signup, Self Service, User Management,
+DB Management and Redis Management – no own tables, no own schema:
+
+- users: `sql_stuff.add_userdata`, `change_password`, `modify_user`,
+  `delete_user` (+ the upload directory, like Streamlit)
+- metric/heading tables: `sql_stuff.add_metric`, `delete_metric`,
+  `add_header`, `update_header`, `delete_header`, then
+  `sqlite2_polars.invalidate_table_cache` so every process sees the change
+- logins: `handle_user_status.add_record`, `increment_login_counter`,
+  `remove_old_logins` (the login history in `$UPLOAD_DIR/config`)
+- settings: `config.update_settings` writes `$UPLOAD_DIR/config/settings.json`
+  (mode 0600); `Config.<name>` returns a stored value before the environment
+  variable, in every process, without a restart. `redis_mng` reconnects when
+  the Redis settings change
+
+`sql_stuff` keeps one module-level SQLAlchemy session; sar-web-api serializes
+every use of it with a lock. In production that is the server's `data.db`
+(protected from `git pull` with `skip-worktree`, see sarfile_analyzer_ng's
+`deployment/lab/README-lab.md`); the `data.db` in git stays the seed.
+
+Differences to Streamlit: changing your own password needs the current
+password; signup rejects the reserved name `config` (the shared directory in
+`UPLOAD_DIR`); a header that already exists gives 409 instead of being skipped
+silently.
+
+E2E runs start the API with `python -m sar_web_api.e2e_server`: it copies the
+`data.db` it would use into a temporary directory and serves the app on that
+copy.
+
 ## How it is coupled to sarfile_analyzer_ng
 
 Imported read-only (a change there can break this service; `tests/` pins the
@@ -94,7 +147,15 @@ API's `/data` and `/statistics`):
   `_parse_bound`, `_CPU_LIKE`, `DEFAULT_OVERVIEW_ALIASES`, `ServiceError`
 - `pl_helpers2`: `get_data_frames_from__headers`, `get_sub_device_from_header`,
   `get_metrics_from_df`, `get_restart_headers`
-- `sqlite2_polars.get_table_df("metric")`, `sql_stuff.login_user`/`get_role`,
+- `sqlite2_polars`: `get_table_df`, `invalidate_table_cache`,
+  `refresh_all_tables`
+- `sql_stuff`: the functions above, `get_role`, `view_all_users`,
+  `ret_all_roles`, the models `User`/`Metrics`/`Headings`, and its globals
+  `data_db`/`engine`/`Session`/`session` (rebound by `SAR_WEB_DB`)
+- `config`: `EDITABLE_SETTINGS`, `SECRET_SETTINGS`, `stored_settings`,
+  `update_settings` (Settings page)
+- `handle_user_status`, `redis_mng.get_rs`, `hashing.verify_password`,
+  `validation.is_valid_username`, `api.services.EXCLUDED_UPLOAD_DIRS`,
   `config.Config`
 
 Before calling `get_metrics_from_df`, whitespace in the data column is collapsed

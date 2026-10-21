@@ -146,4 +146,22 @@ def current_session(
 
 
 def current_user(session: Session = Depends(current_session)) -> str:
+    # a deleted user's tokens stop working at once
+    from . import accounts
+
+    if accounts.role(session.username) is None:
+        raise HTTPException(status_code=401, detail="User no longer exists")
+    return session.username
+
+
+def admin_user(session: Session = Depends(current_session)) -> str:
+    """Admin pages: the role is read from data.db on every request, so a
+    role change takes effect without a new login."""
+    from . import accounts
+
+    user_role = accounts.role(session.username)
+    if user_role is None:
+        raise HTTPException(status_code=401, detail="User no longer exists")
+    if user_role != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
     return session.username

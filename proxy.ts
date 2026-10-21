@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/session";
 
-// Endpoints of sar-web-api that work without a bearer token.
-const PUBLIC_API = new Set(["/api/v2/health", "/api/v2/token"]);
+// Endpoints of sar-web-api that work without a bearer token. Signup is not
+// among them: the browser signs up through app/api/auth/signup.
+const PUBLIC_API = new Set(["/api/v2/health", "/api/v2/token", "/api/v2/info"]);
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -49,5 +50,8 @@ export const config = {
     "/devices/:path*",
     "/compare/:path*",
     "/multi/:path*",
+    "/account/:path*",
+    "/info/:path*",
+    "/admin/:path*",
   ],
 };

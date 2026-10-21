@@ -4,8 +4,9 @@ A web frontend for the sar analyzer of
 [jschaef/sarfile_analyzer_ng](https://github.com/jschaef/sarfile_analyzer_ng),
 in two parts:
 
-- **Next.js app** (repository root): login, file management and the five
-  analysis views of the Streamlit app.
+- **Next.js app** (repository root): every page of the Streamlit app – login,
+  signup, file management, the five analysis views, self service, the admin
+  pages and info (only the TODO page is left out).
 - **sar-web-api** ([`backend/`](backend/README.md)): a small FastAPI service the
   app talks to. It imports the parser and header logic of a sarfile_analyzer_ng
   checkout read-only and adds what that project's own API lacks (column-oriented
@@ -18,6 +19,9 @@ Features:
 - **Login**: username/password against the analyzer user DB; the session token
   is kept in an httpOnly cookie and never reaches browser JavaScript. Logout
   revokes the token on the server.
+- **Signup**: create an account with role `user` (can be switched off with
+  `SAR_WEB_SIGNUP=false` in sar-web-api); you are logged in right away. The
+  login page links to it and names the admin contact for forgotten passwords.
 - **Manage SAR Files**: list (host, sar date, size), upload (drag & drop,
   several files, progress), delete.
 - **Graphical Overview**: the overview page of the Streamlit app with header/alias
@@ -39,6 +43,28 @@ Features:
   ("consecutive"), with a time range, combined and per-file statistics, and a
   summary per file.
 
+- **Self Service** (click your user name): change your own password (needs the
+  current one).
+- **Admin** (role `admin` only, checked by the API on every request):
+  - *User Management*: users and roles, set a password, delete a user with
+    their SAR files, successful-login counter, login history with filters and
+    "delete records older than".
+  - *DB Management*: metric descriptions (search, add, delete) and sar headings
+    (search by alias/metric/description, add, edit, delete).
+  - *Redis Management*: Redis keys, delete fields of a hash.
+  - *Settings*: the runtime values of sarfile_analyzer_ng's `config.py` –
+    contact (admin e-mail, chat), limits (metrics in Compare Metrics, select
+    boxes per line) and the Redis connection. Stored values win over the
+    environment variables and apply to this frontend and the Streamlit app
+    without a restart; *Reset* goes back to the environment.
+- **Info**: about, FAQ, contact and code links.
+
+Signup, Self Service and the admin pages write to sarfile_analyzer_ng's
+`code/data.db` through that project's own functions, like its Streamlit pages
+(details in [backend/README.md](backend/README.md#writing-to-datadb)). The
+`data.db` in git stays the seed (admin/password, headings, metrics); tests
+always work on a temporary copy.
+
 The analysis views share a sub navigation that keeps the chosen file
 (`?file=`). The login form also works without JavaScript (it posts to
 `/api/auth/login`, which answers with a redirect; cross-site posts are rejected).
@@ -50,12 +76,12 @@ next-themes (light/dark/system), Playwright; FastAPI + polars for sar-web-api.
 ## Architecture
 
 ```
-browser ──► Next.js :3100 ──┬─ /api/auth/login|logout   route handlers: set/clear the httpOnly cookie,
+browser ──► Next.js :3100 ──┬─ /api/auth/login|logout|signup  route handlers: set/clear the httpOnly cookie,
                             │                           logout revokes the token at sar-web-api
                             ├─ /api/upload              route handler, streams multipart to POST /api/v2/files
                             └─ /api/v2/*  ─ proxy.ts adds "Authorization: Bearer <cookie>"
                                           ─ rewrite (next.config.ts) ──► sar-web-api :8200 /api/v2/*
-                                                                         │ imports code/ + api/ (read-only)
+                                                                         │ imports code/ + api/ (never changed)
                                                                          ▼
                                               sarfile_analyzer_ng checkout, shared UPLOAD_DIR + code/data.db
 ```
@@ -103,6 +129,11 @@ npm ci
 npm run dev                       # http://localhost:3100, seed login admin / password
 ```
 
+Trying out signup and the admin pages without touching the checkout's
+`code/data.db`: start sar-web-api with `python -m sar_web_api.e2e_server`
+instead of `uvicorn …` (a temporary copy of the seed DB), or point `SAR_WEB_DB`
+at your own copy.
+
 Production: `npm run build && npm run start`. Both listen on port 3100 (3000 is
 often taken by other local dev servers); another port: `npm run dev -- -p 3200`. sar-web-api's settings are in
 [backend/README.md](backend/README.md).
@@ -137,22 +168,30 @@ E2E:
   added slot); Multiple SAR Files (the fixture and a copy shifted by one day:
   overlay, statistics, consecutive, summary); the login form post (303 +
   httpOnly cookie, wrong password, cross-site 403).
+- `e2e/account.spec.ts`: signup (password mismatch, duplicate name, form post
+  without JavaScript), no admin menu and "Admins only" for a normal user, Self
+  Service, User Management (own row locked, role change seen by the user's open
+  session, password, login history, delete → the user's session ends), DB
+  Management (metric and heading add/edit/delete), Settings (admin e-mail on
+  a visitor's login page, limit in Compare Metrics, reset), Redis and Info.
 
 Options for the e2e run:
 
 - `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome` – use a preinstalled Chromium.
-- sar-web-api is started from `backend/` with `uvicorn sar_web_api.main:app
-  --port 8200`: `uvicorn` must be on the PATH (venv activated) and
-  `UPLOAD_DIR`, `SAR_WEB_API_SECRET` (and `SAR_BACKEND_DIR` if the checkout is
-  not at `../sarfile_analyzer_ng`) set. `SAR_E2E_SKIP_API=1` never starts it,
-  `SAR_E2E_API_CMD` changes the command.
+- sar-web-api is started from `backend/` with `python -m
+  sar_web_api.e2e_server --port 8200` – the app on a temporary copy of the seed
+  `data.db`, because the account tests sign up users and edit tables. The venv
+  must be active and `UPLOAD_DIR`, `SAR_WEB_API_SECRET` (and `SAR_BACKEND_DIR`
+  if the checkout is not at `../sarfile_analyzer_ng`) set. `SAR_E2E_SKIP_API=1`
+  never starts it, `SAR_E2E_API_CMD` changes the command. An API that already
+  listens on :8200 is reused – never let that be one with real users.
 - `SAR_E2E_REAL_FILE=/path/to/sar-file SAR_E2E_REAL_HOST=<host>` – additionally
   runs `e2e/real-file.spec.ts` against a real sar file outside the repo
   (Overview, Detailed Metrics, Metrics on many devices). `<host>` is the
   hostname from the file's first line.
 - `SAR_SCREENSHOTS_DIR=docs/screenshots [SAR_SCREENSHOTS_WIDTH=1024]` – writes the
-  screenshots of login, Overview, Detailed Metrics, Metrics on many devices and
-  Compare Metrics in light and dark.
+  screenshots of login, Overview, Detailed Metrics, Metrics on many devices,
+  Compare Metrics, User Management, DB Management and Settings in light and dark.
 
 ## Test data
 
@@ -176,7 +215,7 @@ python3 scripts/generate_sar.py --cpus 352 --samples 2833 --interval 30 --minima
 ## Layout
 
 ```
-app/login                 login page + form
+app/login, app/signup     login and signup pages (components/auth-page, help-note)
 app/(app)/files           file management
 app/(app)/(analyze)       analysis views with a shared sub navigation (layout.tsx):
   overview                  Graphical Overview (overview, alias-section, chart-card)
@@ -184,10 +223,13 @@ app/(app)/(analyze)       analysis views with a shared sub navigation (layout.ts
   devices                   Metrics on many devices
   compare                   Compare Metrics
   multi                     Multiple SAR Files
+app/(app)/account         Self Service
+app/(app)/admin           users (+ login history), database (metrics, headings), redis, settings
+app/(app)/info            Info
 components/analyze        shared parts of the views: file picker, sub navigation,
                           result tabs, data table, statistics, metric descriptions
-app/api/auth/*, api/upload  route handlers (cookie + revocation, streaming upload)
-backend/                  sar-web-api (FastAPI, pytest)
+app/api/auth/*, api/upload  route handlers (cookie + revocation, signup, streaming upload)
+backend/                  sar-web-api (FastAPI, pytest; accounts.py for the account/admin endpoints)
 components/charts         ECharts wrapper (tree-shaken echarts/core)
 components/ui             shadcn/ui components
 lib/                      API client, hooks, sar data helpers, describe() statistics,
