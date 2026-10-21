@@ -391,13 +391,13 @@ def threshold(
     if low is None and high is None:
         return result
 
-    hits = values
+    # time window first: a window without any samples is an error, a window
+    # without matching samples is just matches = 0
+    hits = _time_filter(values, start, end)
     if low is not None:
         hits = hits.filter(pl.col("value") >= low)
     if high is not None:
         hits = hits.filter(pl.col("value") <= high)
-    if hits.height:
-        hits = _time_filter(hits, start, end)
     # same device order as _natural: 'all', CPUs numerically, then names
     hits = hits.sort(
         [
