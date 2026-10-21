@@ -55,7 +55,8 @@ export default function InfoPage() {
             <p className="text-muted-foreground">
               Zoom with the mouse wheel or the slider below a diagram, drag to move the visible range, click a
               legend entry to hide or show a metric. The buttons at the top right zoom into a selected area, undo
-              the zoom, reset the diagram and save it as an image. Red dashed lines mark a restart of the system.
+              the zoom, reset the diagram and save it as an image. Red dashed lines mark a restart of the system;
+              in Multiple SAR Files each file&apos;s restarts have the colour of its line.
             </p>
           </div>
           <div>

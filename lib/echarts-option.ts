@@ -14,8 +14,9 @@ export const PALETTE = [
 export const RESTART_SERIES = "LINUX RESTART";
 
 // A line with its own time axis: charts that combine data from several
-// headers, devices or files, whose timestamps need not match.
-export type Line = { name: string; x: number[]; y: (number | null)[] };
+// headers, devices or files, whose timestamps need not match. Restarts of a
+// line (one file of several) are drawn in its colour and hide with it.
+export type Line = { name: string; x: number[]; y: (number | null)[]; restarts?: number[] };
 
 export type LineChartInput = {
   // either columns sharing one time axis (one header) ...
@@ -60,16 +61,30 @@ export function buildLineOption(input: LineChartInput): EChartsOption {
     xMin = columns.x[0];
     xMax = columns.x[columns.x.length - 1];
   } else {
-    series = (lines ?? []).map((line) => ({
-      ...common,
-      name: line.name,
-      data: line.x.map((x, i) => [x, line.y[i]]),
-    }));
     for (const line of lines ?? []) {
       if (line.x.length === 0) continue;
       xMin = Math.min(xMin ?? Infinity, line.x[0]);
       xMax = Math.max(xMax ?? -Infinity, line.x[line.x.length - 1]);
     }
+    series = (lines ?? []).map((line, index) => {
+      const color = PALETTE[index % PALETTE.length];
+      const own = (line.restarts ?? []).filter((x) => xMin !== undefined && x >= xMin && x <= xMax!);
+      return {
+        ...common,
+        name: line.name,
+        color,
+        data: line.x.map((x, i) => [x, line.y[i]]),
+        ...(own.length > 0 && {
+          markLine: {
+            symbol: "none",
+            silent: true,
+            lineStyle: { color, type: "dashed", width: 1.5 },
+            label: { formatter: "LINUX RESTART", color, position: "insideEndTop" },
+            data: own.map((x) => ({ xAxis: x })),
+          },
+        }),
+      };
+    });
   }
 
   // Restart markers live on their own empty series that is not in the legend:
