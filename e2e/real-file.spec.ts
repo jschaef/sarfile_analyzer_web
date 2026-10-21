@@ -8,7 +8,7 @@ const realFile = process.env.SAR_E2E_REAL_FILE;
 
 test.skip(!realFile, "SAR_E2E_REAL_FILE not set");
 
-test("real sar file: default overview renders", async ({ page }) => {
+test("real sar file: overview, details and devices render", async ({ page }) => {
   await login(page);
   const host = process.env.SAR_E2E_REAL_HOST ?? path.basename(realFile!);
   const name = await upload(page, realFile!, host);
@@ -17,5 +17,13 @@ test("real sar file: default overview renders", async ({ page }) => {
   await expect(page.getByTestId("alias-section")).toHaveCount(5);
   await expect(renderedCharts(page)).toHaveCount(5);
   await expect(page.locator("[data-testid=chart-card][data-alias=CPU]")).toContainText(/all of \d+/);
+
+  await page.goto(`/details?file=${encodeURIComponent(name)}`);
+  await expect(page.getByTestId("details-title")).toHaveText(/^CPU · all of \d+ · %usr$/);
+  await expect(renderedCharts(page).filter({ visible: true })).toHaveCount(1);
+
+  await page.goto(`/devices?file=${encodeURIComponent(name)}`);
+  await page.getByTestId("find-devices").click();
+  await expect(page.getByTestId("device-matches")).toContainText(/matches on \d+ device\(s\)/);
   await deleteFile(page, name);
 });
