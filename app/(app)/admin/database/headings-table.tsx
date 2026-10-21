@@ -1,7 +1,7 @@
 "use client";
 
 import { PencilIcon, PlusIcon, SearchIcon, Trash2Icon } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useId, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdminError } from "@/components/admin/admin-error";
 import { message, useAdminData } from "@/components/admin/use-admin-data";
@@ -196,6 +196,8 @@ function HeadingForm({
   onCancel: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  // the add form and an edit row can be open at the same time
+  const id = useId();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -217,9 +219,9 @@ function HeadingForm({
   return (
     <form onSubmit={submit} className="grid gap-3 rounded-lg border bg-background p-3 md:grid-cols-2" data-testid="heading-form">
       <div className="space-y-1.5 md:col-span-2">
-        <Label htmlFor="heading-header">Header (the metric columns of the sar section)</Label>
+        <Label htmlFor={`${id}-header`}>Header (the metric columns of the sar section)</Label>
         <Textarea
-          id="heading-header"
+          id={`${id}-header`}
           name="header"
           required
           rows={2}
@@ -229,16 +231,16 @@ function HeadingForm({
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="heading-alias">Alias</Label>
-        <Input id="heading-alias" name="alias" required maxLength={200} defaultValue={initial.alias} />
+        <Label htmlFor={`${id}-alias`}>Alias</Label>
+        <Input id={`${id}-alias`} name="alias" required maxLength={200} defaultValue={initial.alias} />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="heading-keyword">Keyword</Label>
-        <Input id="heading-keyword" name="keyword" maxLength={20} defaultValue={initial.keyword} placeholder="CPU, DEV, IFACE, None" />
+        <Label htmlFor={`${id}-keyword`}>Keyword</Label>
+        <Input id={`${id}-keyword`} name="keyword" maxLength={20} defaultValue={initial.keyword} placeholder="CPU, DEV, IFACE, None" />
       </div>
       <div className="space-y-1.5 md:col-span-2">
-        <Label htmlFor="heading-description">Description</Label>
-        <Textarea id="heading-description" name="description" maxLength={1000} rows={3} defaultValue={initial.description} />
+        <Label htmlFor={`${id}-description`}>Description</Label>
+        <Textarea id={`${id}-description`} name="description" maxLength={1000} rows={3} defaultValue={initial.description} />
       </div>
       <div className="flex gap-2 md:col-span-2">
         <Button type="submit" size="sm" disabled={busy}>
