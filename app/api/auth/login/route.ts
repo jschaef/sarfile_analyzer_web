@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${apiUrl()}/api/v1/token`, {
+    upstream = await fetch(`${apiUrl()}/api/v2/token`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ username, password }),

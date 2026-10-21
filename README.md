@@ -1,38 +1,57 @@
-# SAR Analyzer – Next.js frontend (Phase 1)
+# SAR Analyzer – web frontend
 
-A web frontend for the FastAPI of
-[jschaef/sarfile_analyzer_ng](https://github.com/jschaef/sarfile_analyzer_ng)
-(its `api/` directory). This repository contains only the frontend; it talks to
-the API over HTTP and needs no code from it at runtime. All parsing and polars
-work stays in Python; this app only renders. Phase 1 covers:
+A web frontend for the sar analyzer of
+[jschaef/sarfile_analyzer_ng](https://github.com/jschaef/sarfile_analyzer_ng),
+in two parts:
 
-- **Login**: username/password against the analyzer user DB; the API token is
-  kept in an httpOnly cookie and never reaches browser JavaScript.
-- **Manage SAR Files**: list, upload (drag & drop, several files, progress), delete.
+- **Next.js app** (repository root): login, file management, Graphical Overview.
+- **sar-web-api** ([`backend/`](backend/README.md)): a small FastAPI service the
+  app talks to. It imports the parser and header logic of a sarfile_analyzer_ng
+  checkout read-only and adds what that project's own API lacks (column-oriented
+  series of all devices in one request, caching, sample timestamps, structured
+  restarts, metric descriptions, revocable sessions). sarfile_analyzer_ng – its
+  Streamlit UI and its API – stays unchanged and keeps running on its own.
+
+Features:
+
+- **Login**: username/password against the analyzer user DB; the session token
+  is kept in an httpOnly cookie and never reaches browser JavaScript. Logout
+  revokes the token on the server.
+- **Manage SAR Files**: list (host, sar date, size), upload (drag & drop,
+  several files, progress), delete.
 - **Graphical Overview**: the overview page of the Streamlit app with header/alias
   selection (defaults: CPU, Kernel tables, Load, Memory utilization, Swap
-  utilization), per-chart metric selection, time filter, Apache ECharts line
-  charts with zoom, restart markers and a statistics tab.
+  utilization), per-chart metric selection, start/end from the file's real
+  sample times, Apache ECharts line charts with zoom, restart markers, a
+  statistics tab, a metric description ("man pages") tab and the duplicate
+  timestamp warning.
 
 Stack: Next.js 16.4.2 (App Router, Turbopack, Cache Components), React 19.3,
 TypeScript strict, Tailwind CSS 4, shadcn/ui (Base UI), Apache ECharts 6.1,
-next-themes (light/dark/system), Playwright.
+next-themes (light/dark/system), Playwright; FastAPI + polars for sar-web-api.
 
 ## Architecture
 
 ```
-browser ──► Next.js :3000 ──┬─ /api/auth/login|logout   route handlers, set/clear the httpOnly cookie
-                            ├─ /api/upload              route handler, streams multipart to POST /api/v1/files
-                            └─ /api/v1/*  ─ proxy.ts adds "Authorization: Bearer <cookie>"
-                                          ─ rewrite (next.config.ts) ──► FastAPI :8100 /api/v1/*
+browser ──► Next.js :3100 ──┬─ /api/auth/login|logout   route handlers: set/clear the httpOnly cookie,
+                            │                           logout revokes the token at sar-web-api
+                            ├─ /api/upload              route handler, streams multipart to POST /api/v2/files
+                            └─ /api/v2/*  ─ proxy.ts adds "Authorization: Bearer <cookie>"
+                                          ─ rewrite (next.config.ts) ──► sar-web-api :8200 /api/v2/*
+                                                                         │ imports code/ + api/ (read-only)
+                                                                         ▼
+                                              sarfile_analyzer_ng checkout, shared UPLOAD_DIR + code/data.db
 ```
 
-- Same origin for the browser, so the API needs no CORS change.
+- Same origin for the browser, so no CORS anywhere.
 - `proxy.ts` (Next 16's new name for middleware) also redirects pages to
-  `/login` when no session cookie exists. The API validates the token on every
-  call; a 401 drops the cookie and sends the user to the login page.
+  `/login` when no session cookie exists. sar-web-api validates the token on
+  every call; a 401 drops the cookie and sends the user to the login page.
 - Uploads do not go through the rewrite: Next.js buffers bodies on
   proxy-matched paths and cuts them at 10 MB.
+- sar-web-api tokens use their own secret: they do not work against
+  sarfile_analyzer_ng's API and vice versa, so a revoked session cannot be
+  reused there.
 
 ### Overview rules taken over from `code/dia_overview_pl.py` (backend repo)
 
@@ -40,7 +59,10 @@ browser ──► Next.js :3000 ──┬─ /api/auth/login|logout   route hand
   that option order, not the click order** (`sel_order_map`).
 - Headers without sub-devices → one chart. CPU-like headers (`^CPU|SOFT.*`) →
   only the `all` aggregate, labelled "all of N". Other multi-device headers
-  (DEV, IFACE, …) → one chart per device, sorted by name.
+  (DEV, IFACE, …) → one chart per device, sorted by name. sar-web-api applies
+  these rules itself; the app makes **one request per alias**.
+- Duplicate timestamps: the first value is plotted (`keep='first'`, like
+  `final_results`) and the card shows a warning.
 - Charts: canvas renderer, LTTB sampling, `dataZoom` (wheel + slider), animation
   off, legend/metric menu to hide metrics, restarts as dashed red line, PNG export
   from the toolbox. ECharts' `large` mode does not exist for line series (only
@@ -49,28 +71,31 @@ browser ──► Next.js :3000 ──┬─ /api/auth/login|logout   route hand
 ## Run locally
 
 ```bash
-# 1. API: checkout of the backend next to this repo, own venv
+# 1. sarfile_analyzer_ng next to this repo, with its venv (only read, never changed)
 git clone https://github.com/jschaef/sarfile_analyzer_ng ../sarfile_analyzer_ng
-cd ../sarfile_analyzer_ng
-python3 -m venv .venv && . .venv/bin/activate
-pip install -r api/requirements.txt -r code/requirements.txt
-export SAR_API_SECRET=$(openssl rand -hex 32) UPLOAD_DIR=/tmp/sar-upload REDIS_ENABLED=false
-uvicorn api.main:app --host 127.0.0.1 --port 8100
+python3 -m venv ../sarfile_analyzer_ng/.venv && . ../sarfile_analyzer_ng/.venv/bin/activate
+pip install -r ../sarfile_analyzer_ng/api/requirements.txt \
+            -r ../sarfile_analyzer_ng/code/requirements.txt -r backend/requirements.txt
 
-# 2. frontend (this repo)
-cd ../sarfile_analyzer_web
+# 2. sar-web-api (same UPLOAD_DIR as sarfile_analyzer_ng's API, if that runs too)
+export UPLOAD_DIR=/tmp/sar-upload REDIS_ENABLED=false SAR_WEB_API_SECRET=$(openssl rand -hex 32)
+(cd backend && uvicorn sar_web_api.main:app --host 127.0.0.1 --port 8200)
+
+# 3. frontend
 npm ci
-npm run dev                       # http://localhost:3000, seed login admin / password
+npm run dev                       # http://localhost:3100, seed login admin / password
 ```
 
-Production: `npm run build && npm run start`.
+Production: `npm run build && npm run start`. Both listen on port 3100 (3000 is
+often taken by other local dev servers); another port: `npm run dev -- -p 3200`. sar-web-api's settings are in
+[backend/README.md](backend/README.md).
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `SAR_API_URL` | `http://127.0.0.1:8100` | FastAPI base URL. Read by the rewrite **at build time** and by the route handlers at runtime – set it for both. |
+| `SAR_WEB_API_URL` | `http://127.0.0.1:8200` | sar-web-api base URL. Read by the rewrite **at build time** and by the route handlers at runtime – set it for both. |
 | `SAR_COOKIE_SECURE` | `true` in production, else `false` | `Secure` flag of the session cookie. Set `false` only for plain-HTTP setups. |
 
-The session cookie lives as long as the API token (`SAR_API_TOKEN_TTL`, 24 h).
+The session cookie lives as long as the token (`SAR_WEB_API_TOKEN_TTL`, 12 h).
 
 ## Checks
 
@@ -78,21 +103,24 @@ The session cookie lives as long as the API token (`SAR_API_TOKEN_TTL`, 24 h).
 npm run lint
 npm run typecheck
 npm run build
-npm run test:e2e        # needs a build; starts/reuses API (:8100) and Next.js (:3000)
+npm run test:e2e        # needs a build; starts/reuses sar-web-api (:8200) and Next.js (:3100)
+(cd backend && python -m pytest)   # sar-web-api, in the venv from above
 ```
 
 E2E (`e2e/overview.spec.ts`): login → upload the small fixture → Overview with
-the five default aliases → charts rendered → order/device rules → metric menu →
-time filter → statistics → delete → logout (+ 401 afterwards), plus wrong
-password and httpOnly cookie checks.
+the five default aliases → charts rendered → order/device rules → an alias with
+`/` in its name → metric menu → time filter → statistics → metric descriptions →
+delete → logout (+ 401 afterwards), plus theme switching, wrong password and
+httpOnly cookie checks.
 
 Options for the e2e run:
 
 - `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome` – use a preinstalled Chromium.
-- `SAR_E2E_SKIP_API=1` – never start the API from Playwright; `SAR_E2E_API_CMD`
-  changes the start command (default `uvicorn api.main:app --port 8100`, run in
-  `SAR_BACKEND_DIR`, default `../sarfile_analyzer_ng`; `uvicorn` must be on the
-  PATH, e.g. the backend venv activated, and `SAR_API_SECRET`/`UPLOAD_DIR` set).
+- sar-web-api is started from `backend/` with `uvicorn sar_web_api.main:app
+  --port 8200`: `uvicorn` must be on the PATH (venv activated) and
+  `UPLOAD_DIR`, `SAR_WEB_API_SECRET` (and `SAR_BACKEND_DIR` if the checkout is
+  not at `../sarfile_analyzer_ng`) set. `SAR_E2E_SKIP_API=1` never starts it,
+  `SAR_E2E_API_CMD` changes the command.
 - `SAR_E2E_REAL_FILE=/path/to/sar-file SAR_E2E_REAL_HOST=<host>` – additionally
   runs `e2e/real-file.spec.ts` against a real sar file outside the repo.
 - `SAR_SCREENSHOTS_DIR=docs/screenshots [SAR_SCREENSHOTS_WIDTH=1024]` – writes the
@@ -111,24 +139,26 @@ python3 scripts/generate_sar.py --cpus 4 --samples 96 --interval 900 --restart -
 python3 scripts/generate_sar.py --cpus 352 --samples 2833 --interval 30 --minimal -o /tmp/sar_large.txt
 ```
 
-## Performance
+## Performance and API status
 
-See [PERF.md](PERF.md) (ECharts vs BokehJS, `perf/`). API gaps for Phase 2:
-[PHASE2-API-GAPS.md](PHASE2-API-GAPS.md).
+- [PERF.md](PERF.md): ECharts vs BokehJS, payload sizes, API response times.
+- [PHASE2-API-GAPS.md](PHASE2-API-GAPS.md): which gaps of sarfile_analyzer_ng's
+  API sar-web-api closes and what is still open.
 
 ## Layout
 
 ```
 app/login                 login page + form
 app/(app)/files           file management
-app/(app)/overview        Graphical Overview (overview, alias-section, chart-card, statistics-table)
-app/api/auth/*, api/upload  route handlers (cookie, streaming upload)
+app/(app)/overview        Graphical Overview (overview, alias-section, chart-card, statistics, metric descriptions)
+app/api/auth/*, api/upload  route handlers (cookie + revocation, streaming upload)
+backend/                  sar-web-api (FastAPI, pytest)
 components/charts         ECharts wrapper (tree-shaken echarts/core)
 components/ui             shadcn/ui components
 lib/                      API client, sar data helpers, ECharts option builder
 proxy.ts                  auth header injection + page guard
 e2e/                      Playwright tests + small fixture
-perf/                     benchmark (export_payloads.py, bench.mjs)
+perf/                     benchmark (export_payloads.py, bench.mjs, api_timing.py)
 scripts/generate_sar.py   synthetic sar generator
 ```
 

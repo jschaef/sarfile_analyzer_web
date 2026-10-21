@@ -13,10 +13,11 @@ SAR_BACKEND_DIR defaults to a sibling directory ../sarfile_analyzer_ng.
 Writes per scenario:
   <scenario>.bokeh.json    json_item() of bokeh_charts.overview_v1 - exactly what
                            streamlit_bokeh_component.serialize_figure produces
-  <scenario>.echarts.json  rows as GET /files/{name}/data returns them (the
-                           Next.js frontend's input)
-  <scenario>.echarts-same.json  the rows the Bokeh figure actually contains after
-                           its server-side down-sampling (same points for both)
+  <scenario>.echarts.json  the sar-web-api response the frontend gets
+                           (GET /api/v2/files/{name}/series, column-oriented)
+  <scenario>.echarts-same.json  same format, but only the rows the Bokeh figure
+                           contains after its server-side down-sampling (same
+                           points for both)
   meta.json                sizes, row/series counts, server-side timings, versions
 
 Scenarios:
@@ -41,10 +42,13 @@ BACKEND = Path(
 ).resolve()
 if not (BACKEND / "api" / "bootstrap.py").is_file():
     sys.exit(f"sarfile_analyzer_ng checkout not found at {BACKEND} - set SAR_BACKEND_DIR")
-sys.path.insert(0, str(BACKEND))
+sys.path.append(str(BACKEND))  # appended: code/ would shadow the stdlib "code" module
 
 from api import bootstrap  # noqa: E402,F401  (puts code/ on sys.path)
 from api import services  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+from sar_web_api import data  # noqa: E402
 
 import bokeh  # noqa: E402
 import bokeh_charts  # noqa: E402
@@ -56,11 +60,19 @@ from bokeh.embed import json_item  # noqa: E402
 WIDTH, HEIGHT = 1200, 400
 
 
-def api_rows(table: pd.DataFrame) -> list[dict]:
-    """Same transformation as api/main.py get_data()."""
-    records = table.reset_index()
-    records["date"] = records["date"].astype(str)
-    return records.to_dict(orient="records")
+def series_payload(table: pd.DataFrame, per_device_metric: str | None = None) -> dict:
+    """A pandas table in sar-web-api's series format. per_device_metric: the
+    columns are devices (per-core table) - one series entry per device."""
+    x = pd.DatetimeIndex(table.index).as_unit("ms").asi8.tolist()
+
+    def values(column: pd.Series) -> list:
+        return [None if v != v else round(float(v), 2) for v in column]
+
+    if per_device_metric is None:
+        entries = [{"device": "all", "x": x, "values": {c: values(table[c]) for c in table.columns}}]
+        return {"metrics": list(table.columns), "series": entries}
+    entries = [{"device": c, "x": x, "values": {per_device_metric: values(table[c])}} for c in table.columns]
+    return {"metrics": [per_device_metric], "series": entries}
 
 
 def bokeh_payload(table: pd.DataFrame, title: str, os_details: str) -> tuple[str, float, float]:
@@ -110,9 +122,17 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
 
     cpu_table, meta = services.get_table(args.user, args.file, "CPU")
+    per_core = per_core_table(args.user, args.file)
     tables = {
-        "cpu-overview": (cpu_table, "CPU all"),
-        "cpu-per-core": (per_core_table(args.user, args.file), "CPU %usr per core"),
+        "cpu-overview": (cpu_table, "CPU all", None),
+        "cpu-per-core": (per_core, "CPU %usr per core", "%usr"),
+    }
+    # what the frontend really receives from sar-web-api
+    api_payloads = {
+        "cpu-overview": data.series(args.user, args.file, "CPU"),
+        "cpu-per-core": data.series(
+            args.user, args.file, "CPU", devices=",".join(per_core.columns), metrics="%usr"
+        ),
     }
 
     info: dict = {
@@ -121,13 +141,14 @@ def main() -> None:
         "chart_size": [WIDTH, HEIGHT],
         "scenarios": {},
     }
-    for scenario, (table, title) in tables.items():
+    for scenario, (table, title, per_device_metric) in tables.items():
         bokeh_json, build_ms, serialize_ms = bokeh_payload(table, title, meta["os_details"])
         same = sampled_like_bokeh(table)
         files = {
             "bokeh": bokeh_json,
-            "echarts": json.dumps({"rows": len(table), "data": api_rows(table)}),
-            "echarts-same": json.dumps({"rows": len(same), "data": api_rows(same)}),
+            # compact separators, like FastAPI's JSONResponse
+            "echarts": json.dumps(api_payloads[scenario], separators=(",", ":")),
+            "echarts-same": json.dumps(series_payload(same, per_device_metric), separators=(",", ":")),
         }
         for kind, text in files.items():
             (out / f"{scenario}.{kind}.json").write_text(text)

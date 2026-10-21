@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, apiUrl } from "@/lib/session";
 
-// Streams a multipart upload straight to POST /api/v1/files. This path is
+// Streams a multipart upload straight to POST /api/v2/files. This path is
 // deliberately outside the proxy.ts matcher: Next.js buffers (and truncates
 // at 10 MB) request bodies on proxy-matched paths.
 export async function POST(request: NextRequest) {
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${apiUrl()}/api/v1/files`, {
+    upstream = await fetch(`${apiUrl()}/api/v2/files`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": contentType },
       body: request.body,

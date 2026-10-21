@@ -3,8 +3,9 @@
 
 export const SESSION_COOKIE = "sar_session";
 
+// sar-web-api (backend/), see next.config.ts
 export function apiUrl(): string {
-  return (process.env.SAR_API_URL ?? "http://127.0.0.1:8100").replace(/\/$/, "");
+  return (process.env.SAR_WEB_API_URL ?? "http://127.0.0.1:8200").replace(/\/$/, "");
 }
 
 // Secure cookies need HTTPS. Default: on in production builds, overridable

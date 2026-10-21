@@ -10,9 +10,3 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
 }
 
-// Upload names follow '<upload date>_<host>_<sar date>' (helpers_pl.rename_sar_file).
-export function describeFileName(name: string): { host: string; sarDate: string; uploaded: string } | null {
-  const match = /^(\d{4}-\d{2}-\d{2})_(.+)_(\d{4}-\d{2}-\d{2})$/.exec(name);
-  if (!match) return null;
-  return { uploaded: match[1], host: match[2], sarDate: match[3] };
-}

@@ -1,0 +1,9 @@
+# sar-web-api runs in the same venv as sarfile_analyzer_ng, which brings
+# polars, pandas, numpy etc.:
+#   pip install -r ../../sarfile_analyzer_ng/api/requirements.txt \
+#               -r ../../sarfile_analyzer_ng/code/requirements.txt \
+#               -r requirements.txt
+fastapi
+uvicorn[standard]
+python-multipart
+pytest

@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
-// Where the FastAPI of jschaef/sarfile_analyzer_ng (its api/) listens. The browser never talks to it
-// directly: /api/v1/* is rewritten to it (same origin, no CORS change needed)
-// and proxy.ts adds the bearer token from the httpOnly session cookie.
-const apiUrl = (process.env.SAR_API_URL ?? "http://127.0.0.1:8100").replace(/\/$/, "");
+// Where sar-web-api (backend/ of this repository) listens. The browser never
+// talks to it directly: /api/v2/* is rewritten to it (same origin, no CORS
+// needed) and proxy.ts adds the bearer token from the httpOnly session cookie.
+const apiUrl = (process.env.SAR_WEB_API_URL ?? "http://127.0.0.1:8200").replace(/\/$/, "");
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
@@ -22,8 +22,8 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
-        source: "/api/v1/:path*",
-        destination: `${apiUrl}/api/v1/:path*`,
+        source: "/api/v2/:path*",
+        destination: `${apiUrl}/api/v2/:path*`,
       },
     ];
   },

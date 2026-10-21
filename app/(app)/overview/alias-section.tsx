@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, api } from "@/lib/api";
+import { api, type SeriesResponse } from "@/lib/api";
 import { apiLimit } from "@/lib/limit";
-import { CPU_LIKE } from "@/lib/sar";
 import { ChartCard } from "./chart-card";
 
 type Props = {
@@ -14,46 +13,25 @@ type Props = {
   start?: string;
   end?: string;
   restarts: number[];
+  descriptions: Record<string, string>;
 };
 
-type Plan = { charts: { device: string | null; subtitle?: string }[] };
-
-// One header (alias) of the overview. Mirrors dia_compute.prepare_df_for_pandas:
-// no sub-devices -> one chart; CPU-like -> only the 'all' aggregate ("all of N");
-// other multi-device headers (DEV, IFACE, ...) -> one chart per device.
-export function AliasSection({ file, alias, start, end, restarts }: Props) {
-  const [plan, setPlan] = useState<Plan | null>(null);
+// One header (alias) of the overview, one request: sar-web-api applies the
+// rules of dia_compute.prepare_df_for_pandas itself (no sub-devices -> one
+// series; CPU-like -> only 'all'; DEV, IFACE, ... -> every device).
+export function AliasSection({ file, alias, start, end, restarts, descriptions }: Props) {
+  const [data, setData] = useState<SeriesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    apiLimit(() => api.headerDetails(file, alias, controller.signal))
-      .then((details) => {
-        const devices = details.devices;
-        if (devices.length === 0) {
-          setPlan({ charts: [{ device: null }] });
-        } else if (CPU_LIKE.test(alias)) {
-          const count = devices.filter((d) => d !== "all").length;
-          setPlan({ charts: [{ device: "all", subtitle: `all of ${count}` }] });
-        } else {
-          // str(sub_title) ordering, as in the Streamlit sort key
-          const sorted = [...devices].sort();
-          setPlan({ charts: sorted.map((device) => ({ device })) });
-        }
-      })
+    apiLimit(() => api.series(file, { header: alias, start, end }, controller.signal))
+      .then(setData)
       .catch((e: Error) => {
-        if (e.name === "AbortError") return;
-        if (e instanceof ApiError && e.status === 404) {
-          // The path parameter cannot carry aliases with '/' (e.g. "I/O and
-          // transfer rate"): fall back to the API's default device. See
-          // PHASE2-API-GAPS.md.
-          setPlan({ charts: [{ device: null }] });
-          return;
-        }
-        setError(e.message);
+        if (e.name !== "AbortError") setError(e.message);
       });
     return () => controller.abort();
-  }, [file, alias]);
+  }, [file, alias, start, end]);
 
   return (
     <section className="space-y-3" data-testid="alias-section" data-alias={alias}>
@@ -63,17 +41,21 @@ export function AliasSection({ file, alias, start, end, restarts }: Props) {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      {!plan && !error && <Skeleton className="h-[440px] w-full" />}
-      {plan?.charts.map((chart) => (
+      {!data && !error && <Skeleton className="h-[440px] w-full" />}
+      {data?.series.map((series) => (
         <ChartCard
-          key={chart.device ?? "-"}
+          key={series.device ?? "-"}
           file={file}
           alias={alias}
-          device={chart.device}
-          subtitle={chart.subtitle ?? (plan.charts.length > 1 ? chart.device ?? undefined : undefined)}
+          series={series}
+          metrics={data.metrics}
+          // "all of N" for the CPU aggregate, the device name for DEV/IFACE charts
+          title={series.device && series.device !== "all" ? series.device : null}
+          subtitle={series.device === "all" ? `all of ${data.device_count}` : undefined}
           start={start}
           end={end}
           restarts={restarts}
+          descriptions={descriptions}
         />
       ))}
     </section>

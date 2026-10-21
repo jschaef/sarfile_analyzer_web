@@ -1,43 +1,56 @@
-// Browser-side client for the FastAPI. All calls are same-origin: /api/v1/*
-// is rewritten to the API and proxy.ts attaches the bearer token.
+// Browser-side client for sar-web-api (backend/). All calls are same-origin:
+// /api/v2/* is rewritten to the API and proxy.ts attaches the bearer token.
 
-export type SarFile = { name: string; size_bytes: number };
+export type SarFile = {
+  name: string;
+  size_bytes: number;
+  host: string | null;
+  sar_date: string | null;
+  uploaded: string | null;
+};
 
 export type HeaderInfo = { header: string; alias: string; metrics: string[] };
+
+export type Restart = { time: number; iso: string; raw: string };
 
 export type FileInfo = {
   name: string;
   os_details: string;
+  host: string | null;
+  cpu_count: number | null;
   start: string;
   end: string;
-  restarts: string[];
+  restarts: Restart[];
+  // every sample time of the file, epoch ms (sar wall-clock time as UTC)
+  timestamps: number[];
   headers: HeaderInfo[];
 };
 
-export type HeaderDetails = {
+export type DeviceSeries = {
+  device: string | null;
+  rows: number;
+  returned: number;
+  sampled: boolean;
+  duplicates: number;
+  x: number[];
+  values: Record<string, (number | null)[]>;
+};
+
+export type SeriesResponse = {
+  file: string;
   header: string;
   alias: string;
   metrics: string[];
   devices: string[];
-  start: string;
-  end: string;
-};
-
-export type DataRow = { date: string } & Record<string, number | string | null>;
-
-export type DataResponse = {
-  header: string;
-  alias: string;
-  device: string | null;
-  rows: number;
-  data: DataRow[];
+  device_count: number;
+  cpu_like: boolean;
+  series: DeviceSeries[];
 };
 
 export type StatisticsResponse = {
   header: string;
   alias: string;
-  device: string | null;
-  statistics: Record<string, Record<string, number | null>>;
+  series: { device: string | null; statistics: Record<string, Record<string, number | null>> }[];
 };
 
 export type UploadResult = {
@@ -77,29 +90,25 @@ async function parse<T>(response: Response): Promise<T> {
 }
 
 function get<T>(path: string, signal?: AbortSignal): Promise<T> {
-  return fetch(`/api/v1${path}`, { signal, cache: "no-store" }).then((r) => parse<T>(r));
+  return fetch(`/api/v2${path}`, { signal, cache: "no-store" }).then((r) => parse<T>(r));
 }
 
 const enc = encodeURIComponent;
+
+type RangeParams = { header: string; devices?: string; start?: string; end?: string };
 
 export const api = {
   me: () => get<{ username: string; role: string }>("/users/me"),
   listFiles: () => get<{ files: SarFile[] }>("/files").then((r) => r.files),
   fileInfo: (name: string, signal?: AbortSignal) => get<FileInfo>(`/files/${enc(name)}`, signal),
-  headerDetails: (name: string, header: string, signal?: AbortSignal) =>
-    get<HeaderDetails>(`/files/${enc(name)}/headers/${enc(header)}`, signal),
-  data: (
-    name: string,
-    params: { header: string; device?: string | null; start?: string; end?: string },
-    signal?: AbortSignal,
-  ) => get<DataResponse>(`/files/${enc(name)}/data?${query(params)}`, signal),
-  statistics: (
-    name: string,
-    params: { header: string; device?: string | null; start?: string; end?: string },
-    signal?: AbortSignal,
-  ) => get<StatisticsResponse>(`/files/${enc(name)}/statistics?${query(params)}`, signal),
+  // devices omitted: what the Graphical Overview shows (one request per alias)
+  series: (name: string, params: RangeParams & { max_points?: string }, signal?: AbortSignal) =>
+    get<SeriesResponse>(`/files/${enc(name)}/series?${query(params)}`, signal),
+  statistics: (name: string, params: RangeParams, signal?: AbortSignal) =>
+    get<StatisticsResponse>(`/files/${enc(name)}/statistics?${query(params)}`, signal),
+  metrics: () => get<{ metrics: Record<string, string> }>("/metrics").then((r) => r.metrics),
   deleteFile: (name: string) =>
-    fetch(`/api/v1/files/${enc(name)}`, { method: "DELETE" }).then((r) =>
+    fetch(`/api/v2/files/${enc(name)}`, { method: "DELETE" }).then((r) =>
       parse<{ deleted: string }>(r),
     ),
   // XMLHttpRequest instead of fetch: fetch has no upload progress events,

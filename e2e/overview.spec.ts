@@ -47,6 +47,12 @@ test("login, upload, overview, charts, delete, logout", async ({ page }) => {
   await expect(blockCards.nth(1)).toHaveAttribute("data-device", "sda");
   await expect(renderedCharts(page)).toHaveCount(7);
 
+  // an alias with "/" in its name (the main API's path parameter could not
+  // carry it) sorts between CPU and Kernel tables
+  await page.getByRole("button", { name: "I/O and transfer rate", exact: true }).click();
+  await expect(sections.nth(2)).toHaveAttribute("data-alias", "I/O and transfer rate");
+  await expect(renderedCharts(page)).toHaveCount(8);
+
   // metric selection: hide everything but %usr in the CPU chart
   await cpu.getByTestId("metric-filter").click();
   await page.getByRole("menuitem", { name: "Hide all" }).click();
@@ -54,15 +60,20 @@ test("login, upload, overview, charts, delete, logout", async ({ page }) => {
   await page.keyboard.press("Escape");
 
   // time filter is applied by the API: 06:00..12:00 every 15 min = 25 samples
-  await page.getByLabel("Start time").fill("06:00:00");
-  await page.getByLabel("End time").fill("12:00:00");
+  // (the pickers offer the file's real sample times)
+  await page.getByLabel("Start time").selectOption("06:00:00");
+  await page.getByLabel("End time").selectOption("12:00:00");
   await page.getByTestId("show-diagrams").click();
   await expect(cpu).toContainText("25 samples");
-  await expect(renderedCharts(page)).toHaveCount(7);
+  await expect(renderedCharts(page)).toHaveCount(8);
 
   // statistics tab (pandas describe() from the API)
   await cpu.getByRole("tab", { name: "Statistics" }).click();
   await expect(cpu.getByTestId("statistics-table")).toContainText("%usr");
+
+  // metric descriptions ("man pages") from the metric table
+  await cpu.getByRole("tab", { name: "Metrics" }).click();
+  await expect(cpu.getByTestId("metric-descriptions")).toContainText("user level");
 
   await deleteFile(page, name);
 
@@ -70,7 +81,7 @@ test("login, upload, overview, charts, delete, logout", async ({ page }) => {
   await expect(page).toHaveURL(/\/login/);
   await page.goto("/overview");
   await expect(page).toHaveURL(/\/login/);
-  const response = await page.request.get("/api/v1/files");
+  const response = await page.request.get("/api/v2/files");
   expect(response.status()).toBe(401);
 });
 
