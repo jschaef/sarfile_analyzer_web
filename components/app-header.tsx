@@ -1,10 +1,11 @@
 "use client";
 
-import { ActivityIcon, LogOutIcon, UserIcon } from "lucide-react";
+import { ActivityIcon, ExternalLinkIcon, LogOutIcon, UserIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { isAnalyzePath } from "@/components/analyze/analyze-nav";
+import { useInfo } from "@/components/help-note";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -22,6 +23,8 @@ export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<{ username: string; role: string } | null>(null);
+  // Admin > Settings > Streamlit app; empty: no link
+  const streamlitUrl = useInfo()?.streamlit_url;
 
   useEffect(() => {
     api
@@ -58,6 +61,19 @@ export function AppHeader() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
+          {streamlitUrl && (
+            <a
+              href={streamlitUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="The classic Streamlit app"
+              data-testid="classic-app"
+              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ExternalLinkIcon className="size-4" />
+              Classic app
+            </a>
+          )}
           {user && (
             <Link
               href="/account"

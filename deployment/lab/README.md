@@ -71,10 +71,13 @@ git clone git@github.com:jschaef/sarfile_analyzer_web.git ~/data1/sarfile_analyz
 ~/data1/sarfile_analyzer_web/deployment/lab/deploy.sh
 ```
 
-Danach als Admin anmelden und unter *Admin › Settings › Streamlit app* den
-„Link to this web frontend" auf `https://dus-lab-sar.lab.dus.suse.com:8444`
-setzen: die Streamlit-App zeigt dann in der Sidebar den Button „New web
-frontend". Leer lassen = kein Link.
+Danach als Admin anmelden und unter *Admin › Settings › Streamlit app* die
+Links zwischen beiden Oberflächen setzen (leer lassen = kein Link):
+
+| Feld | Wert | erscheint |
+|---|---|---|
+| Link to this web frontend | `https://dus-lab-sar.lab.dus.suse.com:8444` | als Button „New web frontend" in der Streamlit-Sidebar |
+| Link to the Streamlit app | `https://dus-lab-sar.lab.dus.suse.com` | als „Classic app" im Header des Web-Frontends |
 
 ## Update (idempotent)
 

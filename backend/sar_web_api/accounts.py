@@ -79,6 +79,8 @@ def info() -> dict:
         "web_code_url": WEB_CODE_URL,
         "signup": signup_enabled(),
         "max_header_count": Config.max_header_count,
+        # link to the classic Streamlit app; empty with an older sarfile_analyzer_ng
+        "streamlit_url": getattr(Config, "streamlit_url", ""),
     }
 
 

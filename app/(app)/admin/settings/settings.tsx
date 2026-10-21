@@ -47,11 +47,15 @@ const GROUPS: { title: string; description: string; fields: Record<string, [stri
   },
   {
     title: "Streamlit app",
-    description: "The classic sar analyzer",
+    description: "Links between this frontend and the classic sar analyzer",
     fields: {
       web_frontend_url: [
         "Link to this web frontend",
         "Shown in the Streamlit sidebar, e.g. https://dus-lab-sar.lab.dus.suse.com:8444 – empty: no link",
+      ],
+      streamlit_url: [
+        "Link to the Streamlit app",
+        "Shown as \"Classic app\" in the header of this frontend, e.g. https://dus-lab-sar.lab.dus.suse.com – empty: no link",
       ],
     },
   },
@@ -202,7 +206,7 @@ function SettingsGroup({
                     <Input
                       id={id}
                       className="max-w-sm"
-                      type={s.secret ? "password" : s.type === "int" ? "number" : name === "admin_email" ? "email" : name === "web_frontend_url" ? "url" : "text"}
+                      type={s.secret ? "password" : s.type === "int" ? "number" : name === "admin_email" ? "email" : name.endsWith("_url") ? "url" : "text"}
                       min={s.type === "int" ? (s.min ?? undefined) : undefined}
                       max={s.type === "int" ? (s.max ?? undefined) : undefined}
                       maxLength={s.type === "str" ? (s.max ?? undefined) : undefined}

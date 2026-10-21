@@ -175,7 +175,7 @@ test.describe.serial("accounts and admin", () => {
   test("settings: contact and limits apply at once", async () => {
     // start from the environment values, also after an aborted earlier run
     const reset = await admin.request.put("/api/v2/admin/settings", {
-      data: { values: { admin_email: null, max_header_count: null, web_frontend_url: null } },
+      data: { values: { admin_email: null, max_header_count: null, web_frontend_url: null, streamlit_url: null } },
     });
     expect(reset.ok()).toBe(true);
     await admin.goto("/admin/settings");
@@ -220,6 +220,19 @@ test.describe.serial("accounts and admin", () => {
     await expect(link.getByText("set here")).toBeVisible();
     await link.getByRole("button", { name: "Reset" }).click();
     await expect(link.getByText("set here")).toHaveCount(0);
+
+    // and back: the header links to the Streamlit app
+    await expect(admin.getByTestId("classic-app")).toHaveCount(0);
+    await streamlit.getByLabel("Link to the Streamlit app").fill("https://sar.example.org");
+    await streamlit.getByRole("button", { name: "Save", exact: true }).click();
+    const back = admin.locator("[data-testid=setting][data-setting=streamlit_url]");
+    await expect(back.getByText("set here")).toBeVisible();
+    await admin.reload();
+    const classic = admin.getByTestId("classic-app");
+    await expect(classic).toHaveAttribute("href", "https://sar.example.org");
+    await expect(classic).toHaveAttribute("target", "_blank");
+    await back.getByRole("button", { name: "Reset" }).click();
+    await expect(admin.getByRole("button", { name: "Reset" })).toHaveCount(0);
   });
 
   test("redis management and info", async () => {

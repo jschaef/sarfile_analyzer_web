@@ -268,7 +268,12 @@ def test_settings(client, auth):
     }
     original = by_name["admin_email"]["value"]
 
-    values = {"admin_email": "sar-admin@example.org", "admin_communication": "teams", "max_header_count": 4}
+    values = {
+        "admin_email": "sar-admin@example.org",
+        "admin_communication": "teams",
+        "max_header_count": 4,
+        "streamlit_url": "https://sar.example.org",
+    }
     put = client.put(f"{API}/admin/settings", headers=auth, json={"values": values})
     assert put.status_code == 200, put.text
     changed = {entry["name"]: entry for entry in put.json()["settings"]}
@@ -278,6 +283,7 @@ def test_settings(client, auth):
     assert info["admin_email"] == "sar-admin@example.org"
     assert info["admin_communication"] == "teams"
     assert info["max_header_count"] == 4
+    assert info["streamlit_url"] == "https://sar.example.org"
     # and so does sarfile_analyzer_ng's own Config
     assert accounts.Config.admin_email == "sar-admin@example.org"
 
@@ -292,6 +298,7 @@ def test_settings(client, auth):
         {"max_header_count": "4"},
         {"debug": True},
         {"web_frontend_url": "dus-lab-sar:8444"},  # no scheme
+        {"streamlit_url": "https://dus lab"},
     ]
     for bad in bad_values:
         response = client.put(f"{API}/admin/settings", headers=auth, json={"values": bad})

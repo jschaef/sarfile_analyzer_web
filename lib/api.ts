@@ -93,6 +93,7 @@ export type Info = {
   web_code_url: string;
   signup: boolean;
   max_header_count: number;
+  streamlit_url: string;
 };
 
 export type Setting = {
