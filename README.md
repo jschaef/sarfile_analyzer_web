@@ -52,6 +52,11 @@ Features:
   - *DB Management*: metric descriptions (search, add, delete) and sar headings
     (search by alias/metric/description, add, edit, delete).
   - *Redis Management*: Redis keys, delete fields of a hash.
+  - *Settings*: the runtime values of sarfile_analyzer_ng's `config.py` –
+    contact (admin e-mail, chat), limits (metrics in Compare Metrics, select
+    boxes per line) and the Redis connection. Stored values win over the
+    environment variables and apply to this frontend and the Streamlit app
+    without a restart; *Reset* goes back to the environment.
 - **Info**: about, FAQ, contact and code links.
 
 Signup, Self Service and the admin pages write to sarfile_analyzer_ng's
@@ -167,7 +172,8 @@ E2E:
   without JavaScript), no admin menu and "Admins only" for a normal user, Self
   Service, User Management (own row locked, role change seen by the user's open
   session, password, login history, delete → the user's session ends), DB
-  Management (metric and heading add/edit/delete), Redis and Info.
+  Management (metric and heading add/edit/delete), Settings (admin e-mail on
+  a visitor's login page, limit in Compare Metrics, reset), Redis and Info.
 
 Options for the e2e run:
 
@@ -185,7 +191,7 @@ Options for the e2e run:
   hostname from the file's first line.
 - `SAR_SCREENSHOTS_DIR=docs/screenshots [SAR_SCREENSHOTS_WIDTH=1024]` – writes the
   screenshots of login, Overview, Detailed Metrics, Metrics on many devices,
-  Compare Metrics, User Management and DB Management in light and dark.
+  Compare Metrics, User Management, DB Management and Settings in light and dark.
 
 ## Test data
 
@@ -218,7 +224,7 @@ app/(app)/(analyze)       analysis views with a shared sub navigation (layout.ts
   compare                   Compare Metrics
   multi                     Multiple SAR Files
 app/(app)/account         Self Service
-app/(app)/admin           users (+ login history), database (metrics, headings), redis
+app/(app)/admin           users (+ login history), database (metrics, headings), redis, settings
 app/(app)/info            Info
 components/analyze        shared parts of the views: file picker, sub navigation,
                           result tabs, data table, statistics, metric descriptions

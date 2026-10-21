@@ -1,5 +1,6 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { PASSWORD, USER } from "./helpers";
+import path from "node:path";
+import { deleteFile, PASSWORD, upload, USER } from "./helpers";
 
 // Signup, Self Service, the admin pages and Info. Writes to data.db: run it
 // against the API started by playwright.config.ts (python -m
@@ -169,6 +170,46 @@ test.describe.serial("accounts and admin", () => {
     await renamed.getByTestId("delete-heading").click();
     await renamed.getByTestId("confirm-delete-heading").click();
     await expect(admin.getByTestId("heading-row")).toHaveCount(0);
+  });
+
+  test("settings: contact and limits apply at once", async () => {
+    // start from the environment values, also after an aborted earlier run
+    const reset = await admin.request.put("/api/v2/admin/settings", {
+      data: { values: { admin_email: null, max_header_count: null } },
+    });
+    expect(reset.ok()).toBe(true);
+    await admin.goto("/admin/settings");
+    const contact = admin.locator("[data-testid=settings-group][data-group=Contact]");
+    await contact.getByLabel("Admin e-mail").fill("sar-team@example.org");
+    await contact.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(admin.getByText("Contact saved")).toBeVisible();
+    const email = admin.locator("[data-testid=setting][data-setting=admin_email]");
+    await expect(email.getByText("set here")).toBeVisible();
+
+    const views = admin.locator('[data-testid=settings-group][data-group="Analysis views"]');
+    await views.getByLabel("Metrics in Compare Metrics").fill("4");
+    await views.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(admin.getByText("Analysis views saved")).toBeVisible();
+
+    // the login page of a fresh visitor and Compare Metrics follow
+    const visitor = await admin.context().browser()!.newPage();
+    await visitor.goto("/login");
+    await expect(visitor.getByTestId("help-note")).toContainText("sar-team@example.org");
+    await visitor.close();
+    const file = await upload(admin, path.join(__dirname, "fixtures", "sar_small.txt"), "synthetic-host");
+    await admin.goto(`/compare?file=${encodeURIComponent(file)}`);
+    await expect(admin.getByText("Up to 4 combinations")).toBeVisible();
+    await deleteFile(admin, file);
+
+    // Reset: back to the environment / default
+    await admin.goto("/admin/settings");
+    await email.getByRole("button", { name: "Reset" }).click();
+    await expect(email.getByText("set here")).toHaveCount(0);
+    await admin
+      .locator("[data-testid=setting][data-setting=max_header_count]")
+      .getByRole("button", { name: "Reset" })
+      .click();
+    await expect(admin.getByRole("button", { name: "Reset" })).toHaveCount(0);
   });
 
   test("redis management and info", async () => {

@@ -48,10 +48,13 @@ as pandas `describe()`).
 adds what the Streamlit pages Signup, Self Service, User Management,
 DB Management, Redis Management and Info need: `/signup`, `/info`,
 `/users/me/password` and `/admin/*` (users, roles, passwords, login history,
-metric and heading tables, Redis hash fields) – list in
+metric and heading tables, Redis hash fields, the runtime settings of
+`config.py`) – list in
 [backend/README.md](backend/README.md). The writes go through
 sarfile_analyzer_ng's own functions into its `data.db`; nothing in that project
-changes. The TODO page was left out on purpose.
+changes – except for the runtime settings: `config.py` and `redis_mng` of
+sarfile_analyzer_ng read the stored values (own commit there). The TODO page
+was left out on purpose.
 
 ## Still open / new limits
 

@@ -52,6 +52,10 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(page.getByTestId("metric-row").first()).toBeVisible();
     await page.screenshot({ path: path.join(outDir!, `admin-database-${scheme}-${width}.png`) });
 
+    await page.goto("/admin/settings");
+    await expect(page.getByTestId("settings-group")).toHaveCount(3);
+    await page.screenshot({ path: path.join(outDir!, `admin-settings-${scheme}-${width}.png`), fullPage: true });
+
     await deleteFile(page, name);
   });
 }
