@@ -13,8 +13,17 @@ export const PALETTE = [
 // Name of the internal series that carries the restart markers.
 export const RESTART_SERIES = "LINUX RESTART";
 
+// A line with its own time axis: charts that combine data from several
+// headers, devices or files, whose timestamps need not match.
+export type Line = { name: string; x: number[]; y: (number | null)[] };
+
 export type LineChartInput = {
-  columns: Columns;
+  // either columns sharing one time axis (one header) ...
+  columns?: Columns;
+  // ... or independent lines
+  lines?: Line[];
+  // x axis label format; one sar file covers one day, so clock time by default
+  xLabel?: string;
   restarts?: number[];
   dark?: boolean;
   // legend state: metric -> visible; missing keys count as visible
@@ -24,17 +33,14 @@ export type LineChartInput = {
 };
 
 export function buildLineOption(input: LineChartInput): EChartsOption {
-  const { columns, restarts = [], dark = false, selected = {}, sampling = "lttb" } = input;
+  const { columns, lines, restarts = [], dark = false, selected = {}, sampling = "lttb" } = input;
+  const xLabel = input.xLabel ?? "{HH}:{mm}";
   const text = dark ? "#d4d4d4" : "#404040";
   const grid = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
-  const many = columns.metrics.length > 12;
-
-  const source: Record<string, (number | null)[]> = { date: columns.x, ...columns.series };
-
-  const series: LineSeriesOption[] = columns.metrics.map((metric) => ({
+  const names = columns ? columns.metrics : (lines ?? []).map((line) => line.name);
+  const many = names.length > 12;
+  const common: LineSeriesOption = {
     type: "line",
-    name: metric,
-    encode: { x: "date", y: metric },
     showSymbol: false,
     sampling,
     // line series have no `large` mode in ECharts (only scatter/bar/lines);
@@ -42,7 +48,29 @@ export function buildLineOption(input: LineChartInput): EChartsOption {
     lineStyle: { width: many ? 1 : 1.5 },
     emphasis: { focus: "series" },
     connectNulls: false,
-  }));
+  };
+
+  let series: LineSeriesOption[];
+  let xMin: number | undefined;
+  let xMax: number | undefined;
+  let dataset: EChartsOption["dataset"];
+  if (columns) {
+    dataset = { source: { date: columns.x, ...columns.series } };
+    series = columns.metrics.map((metric) => ({ ...common, name: metric, encode: { x: "date", y: metric } }));
+    xMin = columns.x[0];
+    xMax = columns.x[columns.x.length - 1];
+  } else {
+    series = (lines ?? []).map((line) => ({
+      ...common,
+      name: line.name,
+      data: line.x.map((x, i) => [x, line.y[i]]),
+    }));
+    for (const line of lines ?? []) {
+      if (line.x.length === 0) continue;
+      xMin = Math.min(xMin ?? Infinity, line.x[0]);
+      xMax = Math.max(xMax ?? -Infinity, line.x[line.x.length - 1]);
+    }
+  }
 
   // Restart markers live on their own empty series that is not in the legend:
   // a markLine disappears together with its series, so attaching it to a metric
@@ -70,7 +98,7 @@ export function buildLineOption(input: LineChartInput): EChartsOption {
     useUTC: true,
     color: PALETTE,
     textStyle: { color: text },
-    dataset: { source },
+    dataset,
     legend: {
       type: "scroll",
       top: 0,
@@ -78,7 +106,7 @@ export function buildLineOption(input: LineChartInput): EChartsOption {
       right: 0,
       textStyle: { color: text },
       // metrics only - the restart series must not be toggleable
-      data: columns.metrics,
+      data: names,
       selected,
     },
     // legend in the first row, toolbox below it - a scrolling legend's pager
@@ -105,11 +133,11 @@ export function buildLineOption(input: LineChartInput): EChartsOption {
       type: "time",
       // fixed to the data range so the axis (and the restart markers) stay
       // when every metric is switched off
-      min: columns.x[0],
-      max: columns.x[columns.x.length - 1],
-      // a sar file covers one day: plain clock times instead of ECharts'
-      // default month/day labels at day boundaries
-      axisLabel: { color: text, hideOverlap: true, formatter: "{HH}:{mm}" },
+      min: xMin,
+      max: xMax,
+      // plain clock times instead of ECharts' default month/day labels at day
+      // boundaries (one sar file covers one day)
+      axisLabel: { color: text, hideOverlap: true, formatter: xLabel },
       axisLine: { lineStyle: { color: grid } },
       splitLine: { show: false },
     },

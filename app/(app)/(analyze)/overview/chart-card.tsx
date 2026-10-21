@@ -20,8 +20,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { DeviceSeries } from "@/lib/api";
 import { toColumns } from "@/lib/sar";
-import { MetricDescriptions } from "./metric-descriptions";
-import { StatisticsTable } from "./statistics-table";
+import { MetricDescriptions } from "@/components/analyze/metric-descriptions";
+import { StatisticsTable } from "@/components/analyze/statistics-table";
 
 type Props = {
   file: string;

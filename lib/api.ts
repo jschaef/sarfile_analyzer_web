@@ -9,7 +9,7 @@ export type SarFile = {
   uploaded: string | null;
 };
 
-export type HeaderInfo = { header: string; alias: string; metrics: string[] };
+export type HeaderInfo = { header: string; alias: string; metrics: string[]; has_devices: boolean };
 
 export type Restart = { time: number; iso: string; raw: string };
 
@@ -24,6 +24,34 @@ export type FileInfo = {
   // every sample time of the file, epoch ms (sar wall-clock time as UTC)
   timestamps: number[];
   headers: HeaderInfo[];
+};
+
+export type HeaderDetails = {
+  header: string;
+  alias: string;
+  metrics: string[];
+  devices: string[];
+  device_count: number;
+  cpu_like: boolean;
+  overview_devices: (string | null)[];
+  start: string;
+  end: string;
+  timestamps: number[];
+};
+
+export type ThresholdResponse = {
+  header: string;
+  alias: string;
+  metric: string;
+  value_min: number | null;
+  value_max: number | null;
+  start: string;
+  end: string;
+  // only with min/max:
+  matches?: number;
+  rows_returned?: number;
+  devices?: { device: string; count: number; first: number; last: number; peak: number }[];
+  rows?: { time: number; device: string; value: number }[];
 };
 
 export type DeviceSeries = {
@@ -97,13 +125,31 @@ const enc = encodeURIComponent;
 
 type RangeParams = { header: string; devices?: string; start?: string; end?: string };
 
+type ThresholdParams = {
+  header: string;
+  metric: string;
+  min?: string;
+  max?: string;
+  start?: string;
+  end?: string;
+  limit?: string;
+};
+
 export const api = {
   me: () => get<{ username: string; role: string }>("/users/me"),
   listFiles: () => get<{ files: SarFile[] }>("/files").then((r) => r.files),
   fileInfo: (name: string, signal?: AbortSignal) => get<FileInfo>(`/files/${enc(name)}`, signal),
+  header: (name: string, header: string, signal?: AbortSignal) =>
+    get<HeaderDetails>(`/files/${enc(name)}/header?${query({ header })}`, signal),
   // devices omitted: what the Graphical Overview shows (one request per alias)
-  series: (name: string, params: RangeParams & { max_points?: string }, signal?: AbortSignal) =>
+  series: (
+    name: string,
+    params: RangeParams & { metrics?: string; max_points?: string },
+    signal?: AbortSignal,
+  ) =>
     get<SeriesResponse>(`/files/${enc(name)}/series?${query(params)}`, signal),
+  threshold: (name: string, params: ThresholdParams, signal?: AbortSignal) =>
+    get<ThresholdResponse>(`/files/${enc(name)}/threshold?${query(params)}`, signal),
   statistics: (name: string, params: RangeParams, signal?: AbortSignal) =>
     get<StatisticsResponse>(`/files/${enc(name)}/statistics?${query(params)}`, signal),
   metrics: () => get<{ metrics: Record<string, string> }>("/metrics").then((r) => r.metrics),

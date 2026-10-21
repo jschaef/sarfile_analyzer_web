@@ -26,3 +26,19 @@ export function toColumns(series: Pick<DeviceSeries, "x" | "values">, metrics: s
 export function clockTime(epochMs: number): string {
   return new Date(epochMs).toISOString().slice(11, 19);
 }
+
+// "2026-10-01 13:05:00" for an epoch-ms timestamp from the API.
+export function dateTime(epochMs: number): string {
+  return new Date(epochMs).toISOString().slice(0, 19).replace("T", " ");
+}
+
+// Device order of the Streamlit views: 'all' first, CPUs numerically
+// (2 before 10), then names alphabetically.
+export function sortDevices(devices: string[]): string[] {
+  const rank = (d: string) => (d === "all" ? 0 : /^\d+$/.test(d) ? 1 : 2);
+  return [...devices].sort((a, b) => {
+    const diff = rank(a) - rank(b);
+    if (diff !== 0) return diff;
+    return rank(a) === 1 ? Number(a) - Number(b) : a.localeCompare(b);
+  });
+}

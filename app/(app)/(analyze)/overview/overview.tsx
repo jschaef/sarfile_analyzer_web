@@ -1,15 +1,15 @@
 "use client";
 
 import { ArrowUpIcon, BarChart3Icon, ClockIcon, Undo2Icon, XIcon } from "lucide-react";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { FilePicker, NoFiles, PageTitle, SELECT_CLASS } from "@/components/analyze/file-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, type FileInfo, type SarFile } from "@/lib/api";
+import type { FileInfo } from "@/lib/api";
+import { useFileInfo, useMetricDescriptions, useSelectedFile } from "@/lib/hooks";
 import { DEFAULT_OVERVIEW_ALIASES, clockTime } from "@/lib/sar";
 import { cn } from "@/lib/utils";
 import { AliasSection } from "./alias-section";
@@ -17,94 +17,21 @@ import { AliasSection } from "./alias-section";
 // Above this many diagrams the page gets heavy (dia_overview_pl warns too).
 const MANY_ALIASES = 20;
 
-const SELECT_CLASS = "h-8 rounded-lg border border-input bg-background px-2 text-sm dark:bg-input/30";
-
 type TimeRange = { start: string; end: string };
 
 export function Overview() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const fileParam = searchParams.get("file");
+  const { files, fileName, select, error: filesError } = useSelectedFile();
+  const { info, error: infoError } = useFileInfo(fileName);
+  const descriptions = useMetricDescriptions();
+  const error = filesError ?? infoError;
 
-  const [files, setFiles] = useState<SarFile[] | null>(null);
-  const [info, setInfo] = useState<FileInfo | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  // metric descriptions ("man pages"), the same for every file
-  const [descriptions, setDescriptions] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    api
-      .listFiles()
-      .then(setFiles)
-      .catch((e: Error) => setError(e.message));
-    api
-      .metrics()
-      .then(setDescriptions)
-      .catch(() => setDescriptions({}));
-  }, []);
-
-  const fileName = fileParam ?? files?.[0]?.name ?? null;
-
-  useEffect(() => {
-    if (!fileName) return;
-    const controller = new AbortController();
-    api
-      .fileInfo(fileName, controller.signal)
-      .then((result) => {
-        setInfo(result);
-        setError(null);
-      })
-      .catch((e: Error) => {
-        if (e.name !== "AbortError") setError(e.message);
-      });
-    return () => controller.abort();
-  }, [fileName]);
-
-  function selectFile(name: string) {
-    router.replace(`/overview?file=${encodeURIComponent(name)}`);
-  }
-
-  if (files && files.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>No SAR files yet</CardTitle>
-          <CardDescription>Upload a file first, then come back to the overview.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Link href="/files" className={buttonVariants()}>
-            Manage SAR Files
-          </Link>
-        </CardContent>
-      </Card>
-    );
-  }
+  if (files && files.length === 0) return <NoFiles />;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Graphical Overview</h1>
-          <p className="text-sm text-muted-foreground">Overview of important metrics from SAR data</p>
-        </div>
-        <div className="flex min-w-72 flex-col gap-1.5">
-          <Label htmlFor="file-select">SAR file</Label>
-          <select
-            id="file-select"
-            data-testid="file-select"
-            className={SELECT_CLASS}
-            value={fileName ?? ""}
-            onChange={(event) => selectFile(event.target.value)}
-            disabled={!files}
-          >
-            {files?.map((file) => (
-              <option key={file.name} value={file.name}>
-                {file.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <PageTitle title="Graphical Overview" description="Overview of important metrics from SAR data">
+        <FilePicker files={files} value={fileName} onChange={select} />
+      </PageTitle>
 
       {error && (
         <Alert variant="destructive">
@@ -113,7 +40,7 @@ export function Overview() {
         </Alert>
       )}
 
-      {!info || info.name !== fileName ? (
+      {!info ? (
         !error && <Skeleton className="h-48 w-full" />
       ) : (
         // keyed by file: switching files starts from a clean selection
