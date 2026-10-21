@@ -224,6 +224,7 @@ werden. Kurzfassung für Agenten: [`../CLAUDE.md`](../CLAUDE.md).
 - `deploy.sh` von sarfile_analyzer_ng gibt das MCP-Gate-Token bei jedem Lauf
   aus – es landet leicht in Logs oder Chats.
 - Aufräumen auf dem Server: `~/config.py.lokal`, `~/data.db.<Datum>`.
-- MCP-Server aus `.mcp.json` (z. B. `cloud-memory`) werden nur beim Start
-  einer Session geladen; der Bearer-Token muss in der Cloud-Umgebung als
-  Secret hinterlegt sein.
+- Den cloud-memory-MCP-Server stellt die Cloud-Umgebung bereit (die
+  `.mcp.json` in sarfile_analyzer_ng wurde wieder entfernt). MCP-Server
+  werden nur beim Start einer Session geladen.
+- Gegenstück zu diesem Dokument: `sarfile_analyzer_ng/docs/knowledge.md`.
