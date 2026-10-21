@@ -8,17 +8,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { safeNext } from "@/lib/redirect";
 
-// Only same-origin paths are accepted as redirect target after login.
-function safeNext(value: string | null): string {
-  if (value && value.startsWith("/") && !value.startsWith("//")) return value;
-  return "/overview";
-}
+// Set by the route handler when the form was posted without JavaScript.
+const FORM_ERRORS: Record<string, string> = {
+  invalid: "Invalid username or password",
+  missing: "Username and password are required",
+  unavailable: "Login failed - is the server reachable?",
+};
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(FORM_ERRORS[searchParams.get("error") ?? ""] ?? null);
   const [pending, setPending] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -49,7 +51,16 @@ export function LoginForm() {
   return (
     <Card>
       <CardContent>
-        <form onSubmit={onSubmit} className="space-y-4" data-testid="login-form">
+        {/* method/action: without JavaScript the browser posts the form to the
+            route handler - never as GET with the password in the URL */}
+        <form
+          onSubmit={onSubmit}
+          method="post"
+          action="/api/auth/login"
+          className="space-y-4"
+          data-testid="login-form"
+        >
+          <input type="hidden" name="next" value={safeNext(searchParams.get("next"))} />
           <div className="space-y-2">
             <Label htmlFor="username">Username</Label>
             <Input id="username" name="username" autoComplete="username" required autoFocus />
