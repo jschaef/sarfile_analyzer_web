@@ -1,0 +1,19 @@
+# User unit: ~/.config/systemd/user/sar-web.service
+# The Next.js web frontend, rootless on 127.0.0.1:3100, published by the
+# system nginx on :8444 (nginx-sarfile-analyzer-web.conf). Serves the build
+# that deploy.sh made with `npm run build`.
+[Unit]
+Description=SAR web frontend (Next.js, rootless)
+After=network-online.target sar-web-api.service
+Wants=sar-web-api.service
+
+[Service]
+WorkingDirectory=%h/data1/sarfile_analyzer_web
+EnvironmentFile=%h/.config/sar-analyzer/web.env
+Environment=NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
+ExecStart=/usr/bin/env node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3100
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

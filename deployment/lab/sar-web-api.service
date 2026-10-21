@@ -1,0 +1,19 @@
+# User unit: ~/.config/systemd/user/sar-web-api.service
+# sar-web-api, the backend of the web frontend (backend/ of this repository),
+# rootless on 127.0.0.1:8300 (8200 is taken by sar-mcp). It imports the code of
+# sarfile_analyzer_ng and runs in its venv; users, data.db and the upload
+# directory are the ones Streamlit and sar-api use. Only sar-web.service talks
+# to it. Installed and restarted by deploy.sh.
+[Unit]
+Description=SAR web frontend backend (sar-web-api, uvicorn, rootless)
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/data1/sarfile_analyzer_web/backend
+EnvironmentFile=%h/.config/sar-analyzer/web.env
+ExecStart=%h/data1/sarfile_analyzer_ng/code/venv/bin/uvicorn sar_web_api.main:app --host 127.0.0.1 --port 8300
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

@@ -136,7 +136,9 @@ at your own copy.
 
 Production: `npm run build && npm run start`. Both listen on port 3100 (3000 is
 often taken by other local dev servers); another port: `npm run dev -- -p 3200`. sar-web-api's settings are in
-[backend/README.md](backend/README.md).
+[backend/README.md](backend/README.md). The lab server setup (systemd user
+units, nginx on :8444, deploy script) is in
+[deployment/lab/README.md](deployment/lab/README.md).
 
 | Variable | Default | Purpose |
 |---|---|---|
