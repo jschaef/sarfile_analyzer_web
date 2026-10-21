@@ -4,14 +4,15 @@ import { ActivityIcon, LogOutIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { isAnalyzePath } from "@/components/analyze/analyze-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/overview", label: "Graphical Overview" },
-  { href: "/files", label: "Manage SAR Files" },
+  { href: "/overview", label: "Analyze", active: isAnalyzePath },
+  { href: "/files", label: "Manage SAR Files", active: (path: string) => path.startsWith("/files") },
 ];
 
 export function AppHeader() {
@@ -46,7 +47,7 @@ export function AppHeader() {
               href={item.href}
               className={cn(
                 "rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-muted",
-                pathname.startsWith(item.href) && "bg-muted font-medium text-foreground",
+                item.active(pathname) && "bg-muted font-medium text-foreground",
               )}
             >
               {item.label}

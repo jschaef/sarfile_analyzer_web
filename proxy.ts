@@ -41,5 +41,13 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/v2/:path*", "/files/:path*", "/overview/:path*"],
+  matcher: [
+    "/api/v2/:path*",
+    "/files/:path*",
+    "/overview/:path*",
+    "/details/:path*",
+    "/devices/:path*",
+    "/compare/:path*",
+    "/multi/:path*",
+  ],
 };

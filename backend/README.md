@@ -46,10 +46,11 @@ the caches to the host.
 | GET | `/files` | files with size, host, sar date, upload date |
 | POST | `/files` | multipart upload (same conversion as sarfile_analyzer_ng); parses the Overview defaults in the background |
 | DELETE | `/files/{name}` | delete file + parquet, drop caches |
-| GET | `/files/{name}` | OS details, host, CPU count, time range, restarts (`time`, `iso`, `raw`), every sample timestamp, headers |
+| GET | `/files/{name}` | OS details, host, CPU count, time range, restarts (`time`, `iso`, `raw`), every sample timestamp, headers (alias, metrics, `has_devices`) |
 | GET | `/files/{name}/header?header=` | metrics, devices, device count, CPU-like flag, devices of the Overview, timestamps |
 | GET | `/files/{name}/series?header=` | column-oriented data; options below |
 | GET | `/files/{name}/statistics?header=` | pandas-`describe()` numbers per device |
+| GET | `/files/{name}/threshold?header=&metric=` | devices where `metric` lies in `min`..`max` (options below) |
 | GET | `/metrics` | description per sar metric (the Streamlit "man pages") |
 
 `series` options: `devices` (omitted = what the Graphical Overview shows:
@@ -73,6 +74,14 @@ Response of `series` (values rounded to 2 decimals, `null` for gaps):
 
 `x` is the sar wall-clock time as epoch milliseconds interpreted as UTC (sar
 files carry no time zone); render it with UTC to show the file's times.
+
+`threshold` ("Metrics on many devices"), only for headers with devices:
+without `min`/`max` it returns the metric's `value_min`/`value_max` and the
+file's `start`/`end` (form defaults). With `min` and `max` (inclusive) and
+optional `start`/`end` it returns `matches` (total), `devices` (`device`,
+`count`, `peak`, `first`, `last`; `all` first, then numeric order) and `rows`
+(`time`, `device`, `value`, sorted by time and device) cut at `limit`
+(default 500, `0` = only the per-device summary), plus `rows_returned`.
 
 ## How it is coupled to sarfile_analyzer_ng
 

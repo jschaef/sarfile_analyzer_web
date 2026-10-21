@@ -24,6 +24,27 @@ for (const scheme of ["light", "dark"] as const) {
     await page.getByTestId("show-diagrams").click();
     await expect(renderedCharts(page)).toHaveCount(5);
     await page.screenshot({ path: path.join(outDir!, `overview-${scheme}-${width}.png`), fullPage: true });
+
+    const shot = async (view: string, card: string) => {
+      await expect(page.locator(`[data-testid=${card}] [data-testid=echart][data-state=rendered]`)).toHaveCount(1);
+      await page.screenshot({ path: path.join(outDir!, `${view}-${scheme}-${width}.png`), fullPage: true });
+    };
+    const file = `?file=${encodeURIComponent(name)}`;
+    await page.goto(`/details${file}`);
+    await shot("details", "details-card");
+
+    await page.goto(`/devices${file}`);
+    await page.getByLabel("Min").fill("40");
+    await page.getByLabel("Max").fill("60");
+    await page.getByTestId("find-devices").click();
+    await page.getByRole("button", { name: "Select all" }).click();
+    await page.getByTestId("show-device-chart").click();
+    await shot("devices", "device-chart");
+
+    await page.goto(`/compare${file}`);
+    await page.getByLabel("Heading 2").selectOption("Load");
+    await shot("compare", "compare-card");
+
     await deleteFile(page, name);
   });
 }

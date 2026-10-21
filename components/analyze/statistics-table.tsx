@@ -6,7 +6,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { api } from "@/lib/api";
 import { apiLimit } from "@/lib/limit";
 
-type Props = { file: string; alias: string; device: string | null; start?: string; end?: string };
+type Props = {
+  file: string;
+  alias: string;
+  device: string | null;
+  start?: string;
+  end?: string;
+  // only these metrics (default: every metric of the header)
+  metrics?: string[];
+};
 
 // pandas describe() rows, in its own order
 const STATS = ["count", "mean", "std", "min", "25%", "50%", "75%", "max"];
@@ -16,7 +24,7 @@ function format(value: number | null | undefined): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
-export function StatisticsTable({ file, alias, device, start, end }: Props) {
+export function StatisticsTable({ file, alias, device, start, end, metrics: only }: Props) {
   const [stats, setStats] = useState<Record<string, Record<string, number | null>> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +42,7 @@ export function StatisticsTable({ file, alias, device, start, end }: Props) {
   if (error) return <p className="text-sm text-destructive">{error}</p>;
   if (!stats) return <Skeleton className="h-48 w-full" />;
 
-  const metrics = Object.keys(stats);
+  const metrics = Object.keys(stats).filter((m) => !only || only.includes(m));
   return (
     <div className="max-h-[380px] overflow-auto" data-testid="statistics-table">
       <Table>

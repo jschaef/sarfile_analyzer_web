@@ -4,7 +4,8 @@ A web frontend for the sar analyzer of
 [jschaef/sarfile_analyzer_ng](https://github.com/jschaef/sarfile_analyzer_ng),
 in two parts:
 
-- **Next.js app** (repository root): login, file management, Graphical Overview.
+- **Next.js app** (repository root): login, file management and the five
+  analysis views of the Streamlit app.
 - **sar-web-api** ([`backend/`](backend/README.md)): a small FastAPI service the
   app talks to. It imports the parser and header logic of a sarfile_analyzer_ng
   checkout read-only and adds what that project's own API lacks (column-oriented
@@ -25,6 +26,22 @@ Features:
   sample times, Apache ECharts line charts with zoom, restart markers, a
   statistics tab, a metric description ("man pages") tab and the duplicate
   timestamp warning.
+- **Detailed Metrics**: one heading, one device, one metric – or all metrics of
+  the heading ("Summary") – with chart, data table (CSV download, restarts
+  highlighted), statistics and metric descriptions.
+- **Metrics on many devices**: find the devices where a metric lies in a range
+  (e.g. every CPU with `%iowait` between 15.5 and 50) in a time window, list
+  matches per device (count, peak, first/last) and the matching samples, and
+  chart the chosen devices in one diagram.
+- **Compare Metrics**: up to six heading/device/metric combinations in one chart.
+- **Multiple SAR Files**: the same heading/device/metric from several files,
+  either laid over one 24-hour axis or one after another on the real time axis
+  ("consecutive"), with a time range, combined and per-file statistics, and a
+  summary per file.
+
+The analysis views share a sub navigation that keeps the chosen file
+(`?file=`). The login form also works without JavaScript (it posts to
+`/api/auth/login`, which answers with a redirect; cross-site posts are rejected).
 
 Stack: Next.js 16.4.2 (App Router, Turbopack, Cache Components), React 19.3,
 TypeScript strict, Tailwind CSS 4, shadcn/ui (Base UI), Apache ECharts 6.1,
@@ -107,11 +124,19 @@ npm run test:e2e        # needs a build; starts/reuses sar-web-api (:8200) and N
 (cd backend && python -m pytest)   # sar-web-api, in the venv from above
 ```
 
-E2E (`e2e/overview.spec.ts`): login → upload the small fixture → Overview with
-the five default aliases → charts rendered → order/device rules → an alias with
-`/` in its name → metric menu → time filter → statistics → metric descriptions →
-delete → logout (+ 401 afterwards), plus theme switching, wrong password and
-httpOnly cookie checks.
+E2E:
+
+- `e2e/overview.spec.ts`: login → upload the small fixture → Overview with
+  the five default aliases → charts rendered → order/device rules → an alias with
+  `/` in its name → metric menu → time filter → statistics → metric descriptions →
+  delete → logout (+ 401 afterwards), plus theme switching, wrong password and
+  httpOnly cookie checks.
+- `e2e/analyze.spec.ts`: the sub navigation keeps the file; Detailed Metrics
+  (device/metric, summary, data tab, heading without devices); Metrics on many
+  devices (threshold → matches → chart); Compare Metrics (several headings,
+  added slot); Multiple SAR Files (the fixture and a copy shifted by one day:
+  overlay, statistics, consecutive, summary); the login form post (303 +
+  httpOnly cookie, wrong password, cross-site 403).
 
 Options for the e2e run:
 
@@ -122,9 +147,12 @@ Options for the e2e run:
   not at `../sarfile_analyzer_ng`) set. `SAR_E2E_SKIP_API=1` never starts it,
   `SAR_E2E_API_CMD` changes the command.
 - `SAR_E2E_REAL_FILE=/path/to/sar-file SAR_E2E_REAL_HOST=<host>` – additionally
-  runs `e2e/real-file.spec.ts` against a real sar file outside the repo.
+  runs `e2e/real-file.spec.ts` against a real sar file outside the repo
+  (Overview, Detailed Metrics, Metrics on many devices). `<host>` is the
+  hostname from the file's first line.
 - `SAR_SCREENSHOTS_DIR=docs/screenshots [SAR_SCREENSHOTS_WIDTH=1024]` – writes the
-  login/overview screenshots in light and dark.
+  screenshots of login, Overview, Detailed Metrics, Metrics on many devices and
+  Compare Metrics in light and dark.
 
 ## Test data
 
@@ -150,12 +178,20 @@ python3 scripts/generate_sar.py --cpus 352 --samples 2833 --interval 30 --minima
 ```
 app/login                 login page + form
 app/(app)/files           file management
-app/(app)/overview        Graphical Overview (overview, alias-section, chart-card, statistics, metric descriptions)
+app/(app)/(analyze)       analysis views with a shared sub navigation (layout.tsx):
+  overview                  Graphical Overview (overview, alias-section, chart-card)
+  details                   Detailed Metrics
+  devices                   Metrics on many devices
+  compare                   Compare Metrics
+  multi                     Multiple SAR Files
+components/analyze        shared parts of the views: file picker, sub navigation,
+                          result tabs, data table, statistics, metric descriptions
 app/api/auth/*, api/upload  route handlers (cookie + revocation, streaming upload)
 backend/                  sar-web-api (FastAPI, pytest)
 components/charts         ECharts wrapper (tree-shaken echarts/core)
 components/ui             shadcn/ui components
-lib/                      API client, sar data helpers, ECharts option builder
+lib/                      API client, hooks, sar data helpers, describe() statistics,
+                          ECharts option builder
 proxy.ts                  auth header injection + page guard
 e2e/                      Playwright tests + small fixture
 perf/                     benchmark (export_payloads.py, bench.mjs, api_timing.py)

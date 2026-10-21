@@ -28,6 +28,20 @@ section), 4-vCPU dev container, no Redis – details in [PERF.md](PERF.md).
 | 14 | no progress for the server-side parse after upload | unchanged: the upload returns after parsing | open |
 | 15 | SSO built for the Streamlit redirect | not ported; Next.js has username/password login only | open |
 
+## Phase 3: analysis views
+
+The four remaining analysis views needed one more endpoint:
+
+| Need | `/api/v2` | Status |
+|---|---|---|
+| "Metrics on many devices": which devices have a metric within a range (`/api/v1` has no such query; the view would have to load every device) | `GET /files/{name}/threshold?header=&metric=&min=&max=[&start=&end=&limit=]` – matches per device (count, peak, first, last) in natural device order and the matching samples (`limit`, default 500); without `min`/`max` only the value range and time range of the metric, for the form defaults | closed |
+| headings that have devices (the device view lists only those) | `has_devices` per header in `GET /files/{name}` | closed |
+
+Detailed Metrics, Compare Metrics and Multiple SAR Files use the existing
+`header`, `series` and `statistics` endpoints. Multiple SAR Files computes the
+combined statistics of all files in the browser (`lib/stats.ts`, same numbers
+as pandas `describe()`).
+
 ## Still open / new limits
 
 - **Statistics CSV export (12), parse progress (14), SSO (15).**
