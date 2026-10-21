@@ -86,6 +86,33 @@ export type UploadResult = {
   errors: { file: string; detail: string }[];
 };
 
+export type Info = {
+  admin_email: string;
+  admin_communication: string;
+  code_url: string;
+  web_code_url: string;
+  signup: boolean;
+};
+
+export type UserEntry = { username: string; role: string };
+
+export type UsersResponse = {
+  users: UserEntry[];
+  roles: string[];
+  login_count: number;
+  login_count_excludes: string;
+};
+
+export type LoginRecord = { username: string; time: string; success: boolean };
+
+export type MetricEntry = { metric: string; description: string };
+
+export type HeadingEntry = { header: string; alias: string; keyword: string; description: string };
+
+export type RedisKey = { key: string; type: string; fields: string[] };
+
+export type RedisResponse = { enabled: boolean; reachable: boolean; keys: RedisKey[]; truncated?: boolean };
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -121,6 +148,16 @@ function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return fetch(`/api/v2${path}`, { signal, cache: "no-store" }).then((r) => parse<T>(r));
 }
 
+// state-changing calls; a JSON body makes cross-site requests need a CORS
+// preflight, which is never served
+function send<T>(method: "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
+  return fetch(`/api/v2${path}`, {
+    method,
+    headers: body === undefined ? undefined : { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }).then((r) => parse<T>(r));
+}
+
 const enc = encodeURIComponent;
 
 type RangeParams = { header: string; devices?: string; start?: string; end?: string };
@@ -137,6 +174,32 @@ type ThresholdParams = {
 
 export const api = {
   me: () => get<{ username: string; role: string }>("/users/me"),
+  info: () => get<Info>("/info"),
+  changeOwnPassword: (current_password: string, new_password: string) =>
+    send<{ changed: boolean }>("PUT", "/users/me/password", { current_password, new_password }),
+  admin: {
+    users: () => get<UsersResponse>("/admin/users"),
+    setRole: (username: string, role: string) => send("PUT", `/admin/users/${enc(username)}/role`, { role }),
+    setPassword: (username: string, password: string) =>
+      send("PUT", `/admin/users/${enc(username)}/password`, { password }),
+    deleteUser: (username: string) =>
+      send<{ deleted: string; files_removed: boolean }>("DELETE", `/admin/users/${enc(username)}`),
+    logins: (limit = 5000) => get<{ total: number; logins: LoginRecord[] }>(`/admin/logins?limit=${limit}`),
+    deleteLogins: (before: string) =>
+      send<{ deleted: number; remaining: number }>("DELETE", `/admin/logins?${query({ before })}`),
+    metrics: () => get<{ metrics: MetricEntry[] }>("/admin/metrics").then((r) => r.metrics),
+    addMetric: (entry: MetricEntry) => send("POST", "/admin/metrics", entry),
+    deleteMetrics: (metrics: string[]) =>
+      send<{ deleted: string[] }>("DELETE", `/admin/metrics?${repeated("metric", metrics)}`),
+    headers: () => get<{ headers: HeadingEntry[] }>("/admin/headers").then((r) => r.headers),
+    addHeader: (entry: HeadingEntry) => send("POST", "/admin/headers", entry),
+    updateHeader: (original_header: string, entry: HeadingEntry) =>
+      send("PUT", "/admin/headers", { ...entry, original_header }),
+    deleteHeader: (header: string) => send("DELETE", `/admin/headers?${query({ header })}`),
+    redis: () => get<RedisResponse>("/admin/redis"),
+    deleteRedisFields: (key: string, fields: string[]) =>
+      send<{ deleted: number }>("DELETE", `/admin/redis/fields?${query({ key })}&${repeated("field", fields)}`),
+  },
   listFiles: () => get<{ files: SarFile[] }>("/files").then((r) => r.files),
   fileInfo: (name: string, signal?: AbortSignal) => get<FileInfo>(`/files/${enc(name)}`, signal),
   header: (name: string, header: string, signal?: AbortSignal) =>
@@ -185,6 +248,12 @@ export const api = {
       xhr.send(form);
     }),
 };
+
+function repeated(name: string, values: string[]): string {
+  const search = new URLSearchParams();
+  for (const value of values) search.append(name, value);
+  return search.toString();
+}
 
 function query(params: Record<string, string | null | undefined>): string {
   const search = new URLSearchParams();
