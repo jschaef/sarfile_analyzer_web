@@ -19,6 +19,8 @@ Client (VPN) ── https://dus-lab-sar.lab.dus.suse.com
 
 - Der Browser spricht nur mit Next.js. `/api/v2/*` leitet Next.js an
   sar-web-api weiter; das Session-Token steckt in einem httpOnly-Cookie.
+  Ausnahme: Uploads (`/api/upload`) schickt nginx direkt an sar-web-api, siehe
+  unten.
 - sar-web-api importiert den Code von sarfile_analyzer_ng und läuft in dessen
   venv (`~/data1/sarfile_analyzer_ng/code/venv`). Benutzer (`code/data.db`),
   hochgeladene Dateien (`code/upload`) und die Laufzeit-Einstellungen
@@ -53,8 +55,15 @@ Client (VPN) ── https://dus-lab-sar.lab.dus.suse.com
    Wichtig darin ist `proxy_set_header Host $http_host` (mit Port), nicht
    `$host` wie im Streamlit-vHost: Login und Signup vergleichen den Host mit
    dem `Origin` des Browsers (`https://…:8444`) und lehnen sonst jeden Login
-   mit 403 ab. Uploads gehen ungepuffert (`proxy_request_buffering off`) bis
-   2 GB an Next.js.
+   mit 403 ab.
+
+   Uploads (`location = /api/upload`) gehen ungepuffert
+   (`proxy_request_buffering off`, bis 2 GB) **direkt an sar-web-api**, an
+   Next.js vorbei; nginx macht dabei aus dem Session-Cookie den Bearer-Token.
+   Über Next.js wären sie auf 5 Minuten begrenzt: Node.js bricht eine Anfrage
+   ab, deren Übertragung länger dauert, und wartet auch höchstens 5 Minuten
+   auf das Ergebnis. Direkt gilt nur `proxy_read_timeout 3600`: bis zu eine
+   Stunde Einlesen einer großen Datei.
 
 3. **Firewall**, falls aktiv:
 
@@ -137,7 +146,9 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3100/login
 
 - **403 beim Login** → nginx reicht den Host ohne Port weiter
   (`$host` statt `$http_host`).
-- **502 von nginx** → `sar-web` läuft nicht.
+- **502 von nginx** → `sar-web` läuft nicht (beim Upload: `sar-web-api`).
+- **Upload bricht nach genau 5 Minuten ab** → der vHost hat noch keine
+  `location = /api/upload` (alte Conf in `/etc/nginx/conf.d/`).
 - **„SAR API is not reachable"** → `sar-web-api` läuft nicht.
 - **Settings-Seite meldet 501** → sarfile_analyzer_ng ist zu alt
   (`git -C ~/data1/sarfile_analyzer_ng log -1`).

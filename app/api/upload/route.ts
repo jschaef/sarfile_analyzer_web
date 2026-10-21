@@ -3,7 +3,9 @@ import { SESSION_COOKIE, apiUrl } from "@/lib/session";
 
 // Streams a multipart upload straight to POST /api/v2/files. This path is
 // deliberately outside the proxy.ts matcher: Next.js buffers (and truncates
-// at 10 MB) request bodies on proxy-matched paths.
+// at 10 MB) request bodies on proxy-matched paths. Node.js limits it to 5
+// minutes of transfer and 5 minutes of parsing; the lab nginx therefore sends
+// /api/upload to sar-web-api directly (deployment/lab).
 export async function POST(request: NextRequest) {
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   if (!token) {
