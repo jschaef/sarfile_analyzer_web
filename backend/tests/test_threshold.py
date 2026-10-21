@@ -55,6 +55,24 @@ def test_time_window_and_limit(client, auth, uploaded):
     assert len(body["rows"]) == 3
 
 
+def test_no_match_inside_the_time_window(client, auth, uploaded):
+    url = f"/api/v2/files/{uploaded}/threshold"
+    rows = cpu_usr_values()
+    first = rows[0][0]
+    # above every value of the first sample, but hit later in the file
+    low = max(v for t, _, v in rows if t == first) + 0.01
+    assert any(v >= low for _, _, v in rows)
+    body = get(client, auth, url, header="CPU", metric="%usr", min=low, start=first, end=first)
+    assert body["matches"] == 0
+    assert body["devices"] == [] and body["rows"] == []
+    # a window without any samples is still an error
+    response = client.get(
+        url, headers=auth, params={"header": "CPU", "metric": "%usr", "min": 0, "start": "23:59:59"}
+    )
+    assert response.status_code == 400
+    assert "empty data set" in response.text
+
+
 def test_header_without_devices_is_rejected(client, auth, uploaded):
     response = client.get(
         f"/api/v2/files/{uploaded}/threshold", headers=auth, params={"header": "Load", "metric": "ldavg-1"}
