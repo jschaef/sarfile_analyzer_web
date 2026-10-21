@@ -286,7 +286,14 @@ def test_settings(client, auth):
     listed = client.get(f"{API}/admin/settings", headers=auth).text
     assert "s3cret" not in listed
 
-    for bad in [{"redis_port": 70000}, {"admin_email": "nope"}, {"max_header_count": "4"}, {"debug": True}]:
+    bad_values = [
+        {"redis_port": 70000},
+        {"admin_email": "nope"},
+        {"max_header_count": "4"},
+        {"debug": True},
+        {"web_frontend_url": "dus-lab-sar:8444"},  # no scheme
+    ]
+    for bad in bad_values:
         response = client.put(f"{API}/admin/settings", headers=auth, json={"values": bad})
         assert response.status_code == 400, bad
 

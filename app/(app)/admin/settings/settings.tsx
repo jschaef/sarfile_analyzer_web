@@ -45,6 +45,16 @@ const GROUPS: { title: string; description: string; fields: Record<string, [stri
       redis_password: ["Password", "Never shown; type a new one to replace it"],
     },
   },
+  {
+    title: "Streamlit app",
+    description: "The classic sar analyzer",
+    fields: {
+      web_frontend_url: [
+        "Link to this web frontend",
+        "Shown in the Streamlit sidebar, e.g. https://dus-lab-sar.lab.dus.suse.com:8444 – empty: no link",
+      ],
+    },
+  },
 ];
 
 const loadSettings = api.admin.settings;
@@ -82,7 +92,8 @@ export function Settings() {
         <Skeleton className="h-64 w-full" />
       ) : (
         <div className="grid gap-6 xl:grid-cols-2">
-          {GROUPS.map((group) => (
+          {/* a group whose settings this sarfile_analyzer_ng does not know yet stays hidden */}
+          {GROUPS.filter((group) => Object.keys(group.fields).some((name) => byName[name])).map((group) => (
             <SettingsGroup
               // re-mounted (fresh form state) when one of its own values changed
               key={group.title + Object.keys(group.fields).map((n) => `${byName[n]?.source}${byName[n]?.value}`).join()}
@@ -191,7 +202,7 @@ function SettingsGroup({
                     <Input
                       id={id}
                       className="max-w-sm"
-                      type={s.secret ? "password" : s.type === "int" ? "number" : name === "admin_email" ? "email" : "text"}
+                      type={s.secret ? "password" : s.type === "int" ? "number" : name === "admin_email" ? "email" : name === "web_frontend_url" ? "url" : "text"}
                       min={s.type === "int" ? (s.min ?? undefined) : undefined}
                       max={s.type === "int" ? (s.max ?? undefined) : undefined}
                       maxLength={s.type === "str" ? (s.max ?? undefined) : undefined}
