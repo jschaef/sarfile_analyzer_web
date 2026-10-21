@@ -145,9 +145,11 @@ def test_login_history(client, auth):
 
     # nothing is older than 2000-01-01, everything is older than 2999-01-01
     assert client.delete(f"{API}/admin/logins?before=2000-01-01", headers=auth).json()["deleted"] == 0
+    total = client.get(f"{API}/admin/logins?limit=1", headers=auth).json()["total"]
     cleared = client.delete(f"{API}/admin/logins?before=2999-01-01", headers=auth).json()
-    # like Streamlit: an empty history is re-created with one seed record
-    assert cleared["remaining"] == 1
+    # like Streamlit: an empty history is re-created with one seed record,
+    # which does not count against the deleted records
+    assert cleared == {"deleted": total, "remaining": 1}
     assert client.delete(f"{API}/admin/logins?before=yesterday", headers=auth).status_code == 422
 
 

@@ -215,10 +215,11 @@ def delete_logins_before(day: datetime.date) -> dict:
     with _history_lock:
         df = handle_user_status.get_user_status_df()
         result = handle_user_status.remove_old_logins(df, day)
+        deleted = df.height - result.height
         if result.is_empty():
             result = handle_user_status.create_user_status_df()
         handle_user_status.write_df_to_file(result)
-    return {"deleted": df.height - result.height, "remaining": result.height}
+    return {"deleted": deleted, "remaining": result.height}
 
 
 # --------------------------------------------------------------------------
