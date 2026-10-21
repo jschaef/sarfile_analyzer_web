@@ -33,7 +33,7 @@ next-themes (light/dark/system), Playwright; FastAPI + polars for sar-web-api.
 ## Architecture
 
 ```
-browser ──► Next.js :3000 ──┬─ /api/auth/login|logout   route handlers: set/clear the httpOnly cookie,
+browser ──► Next.js :3100 ──┬─ /api/auth/login|logout   route handlers: set/clear the httpOnly cookie,
                             │                           logout revokes the token at sar-web-api
                             ├─ /api/upload              route handler, streams multipart to POST /api/v2/files
                             └─ /api/v2/*  ─ proxy.ts adds "Authorization: Bearer <cookie>"
@@ -83,10 +83,11 @@ export UPLOAD_DIR=/tmp/sar-upload REDIS_ENABLED=false SAR_WEB_API_SECRET=$(opens
 
 # 3. frontend
 npm ci
-npm run dev                       # http://localhost:3000, seed login admin / password
+npm run dev                       # http://localhost:3100, seed login admin / password
 ```
 
-Production: `npm run build && npm run start`. sar-web-api's settings are in
+Production: `npm run build && npm run start`. Both listen on port 3100 (3000 is
+often taken by other local dev servers); another port: `npm run dev -- -p 3200`. sar-web-api's settings are in
 [backend/README.md](backend/README.md).
 
 | Variable | Default | Purpose |
@@ -102,7 +103,7 @@ The session cookie lives as long as the token (`SAR_WEB_API_TOKEN_TTL`, 12 h).
 npm run lint
 npm run typecheck
 npm run build
-npm run test:e2e        # needs a build; starts/reuses sar-web-api (:8200) and Next.js (:3000)
+npm run test:e2e        # needs a build; starts/reuses sar-web-api (:8200) and Next.js (:3100)
 (cd backend && python -m pytest)   # sar-web-api, in the venv from above
 ```
 

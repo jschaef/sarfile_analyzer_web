@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // The e2e test needs both servers: sar-web-api from backend/ (port 8200) and
-// this Next.js app (port 3000, production build: run `npm run build` first).
+// this Next.js app (port 3100, production build: run `npm run build` first).
 // Already running servers are reused. sar-web-api needs the sarfile_analyzer_ng
 // checkout (SAR_BACKEND_DIR, default ../sarfile_analyzer_ng), its venv on the
 // PATH and UPLOAD_DIR / SAR_WEB_API_SECRET in the environment. Set
@@ -9,7 +9,7 @@ import { defineConfig, devices } from "@playwright/test";
 // change how it is started.
 const apiCommand =
   process.env.SAR_E2E_API_CMD ?? "uvicorn sar_web_api.main:app --host 127.0.0.1 --port 8200";
-const port = Number(process.env.PORT ?? 3000);
+const port = Number(process.env.PORT ?? 3100);
 
 export default defineConfig({
   testDir: "./e2e",
