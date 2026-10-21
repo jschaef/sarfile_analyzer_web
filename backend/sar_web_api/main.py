@@ -4,23 +4,32 @@ Run from backend/ (needs the sarfile_analyzer_ng checkout and its venv):
     SAR_BACKEND_DIR=../../sarfile_analyzer_ng UPLOAD_DIR=... SAR_WEB_API_SECRET=... \
         uvicorn sar_web_api.main:app --host 127.0.0.1 --port 8200
 
-Shares users (code/data.db, read-only) and files (UPLOAD_DIR) with the main
-API of sarfile_analyzer_ng, which keeps running unchanged on its own port.
+Shares users and the metric/heading tables (code/data.db, or SAR_WEB_DB) and
+files (UPLOAD_DIR) with sarfile_analyzer_ng, which keeps running unchanged on
+its own port. Writes to data.db go through that project's own functions, like
+its Streamlit pages (see accounts.py).
 """
 
+import datetime
 import logging
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import bootstrap  # noqa: F401  (must come before code/ imports)
 
-import sql_stuff  # noqa: E402
 from api import services  # noqa: E402
 
-from . import data  # noqa: E402
-from .auth import Session, create_token, current_session, current_user, revocations  # noqa: E402
+from . import accounts, data  # noqa: E402
+from .auth import (  # noqa: E402
+    Session,
+    admin_user,
+    create_token,
+    current_session,
+    current_user,
+    revocations,
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -48,6 +57,16 @@ async def _not_found(_, exc: data.NotFound):
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
+@app.exception_handler(accounts.Conflict)
+async def _conflict(_, exc: accounts.Conflict):
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(accounts.Forbidden)
+async def _forbidden(_, exc: accounts.Forbidden):
+    return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+
 @app.get(f"{PREFIX}/health")
 def health():
     return {"status": "ok"}
@@ -63,7 +82,9 @@ class TokenRequest(BaseModel):
 
 @app.post(f"{PREFIX}/token")
 def token(request: TokenRequest):
-    if not sql_stuff.login_user(request.username, request.password):
+    ok = accounts.verify_password(request.username, request.password)
+    accounts.record_login(request.username, ok)
+    if not ok:
         raise HTTPException(status_code=401, detail="Invalid username or password")
     return create_token(request.username)
 
@@ -77,7 +98,164 @@ def logout(session: Session = Depends(current_session)):
 
 @app.get(f"{PREFIX}/users/me")
 def me(username: str = Depends(current_user)):
-    return {"username": username, "role": sql_stuff.get_role(username)}
+    return {"username": username, "role": accounts.role(username)}
+
+
+@app.get(f"{PREFIX}/info")
+def info():
+    """Contact and project links for the Help and Info pages (no login)."""
+    return accounts.info()
+
+
+# --------------------------------------------------------------------------
+# accounts (Signup, Self Service)
+# --------------------------------------------------------------------------
+Username = Field(min_length=1, max_length=50)
+Password = Field(min_length=1, max_length=1024)
+
+
+class SignupRequest(BaseModel):
+    username: str = Username
+    password: str = Password
+
+
+@app.post(f"{PREFIX}/signup", status_code=201)
+def signup(request: SignupRequest):
+    """Create an account with role 'user'. SAR_WEB_SIGNUP=false turns it off."""
+    return accounts.signup(request.username.strip(), request.password)
+
+
+class OwnPasswordRequest(BaseModel):
+    current_password: str = Field(max_length=1024)
+    new_password: str = Password
+
+
+@app.put(f"{PREFIX}/users/me/password")
+def change_own_password(request: OwnPasswordRequest, username: str = Depends(current_user)):
+    accounts.change_own_password(username, request.current_password, request.new_password)
+    return {"changed": True}
+
+
+# --------------------------------------------------------------------------
+# User Management (admin)
+# --------------------------------------------------------------------------
+@app.get(f"{PREFIX}/admin/users")
+def admin_users(admin: str = Depends(admin_user)):
+    return accounts.users()
+
+
+class RoleRequest(BaseModel):
+    role: str
+
+
+@app.put(f"{PREFIX}/admin/users/{{username}}/role")
+def admin_set_role(username: str, request: RoleRequest, admin: str = Depends(admin_user)):
+    accounts.set_role(admin, username, request.role)
+    return {"username": username, "role": request.role}
+
+
+class PasswordRequest(BaseModel):
+    password: str = Password
+
+
+@app.put(f"{PREFIX}/admin/users/{{username}}/password")
+def admin_set_password(username: str, request: PasswordRequest, admin: str = Depends(admin_user)):
+    accounts.set_password(username, request.password)
+    return {"changed": True}
+
+
+@app.delete(f"{PREFIX}/admin/users/{{username}}")
+def admin_delete_user(username: str, admin: str = Depends(admin_user)):
+    """Delete the user and their uploaded files."""
+    return accounts.delete_user(admin, username)
+
+
+@app.get(f"{PREFIX}/admin/logins")
+def admin_logins(limit: int = Query(default=1000, ge=1, le=100_000), admin: str = Depends(admin_user)):
+    """Login history, newest first."""
+    return accounts.logins(limit)
+
+
+@app.delete(f"{PREFIX}/admin/logins")
+def admin_delete_logins(before: datetime.date, admin: str = Depends(admin_user)):
+    """Delete every login record older than `before` (YYYY-MM-DD)."""
+    return accounts.delete_logins_before(before)
+
+
+# --------------------------------------------------------------------------
+# DB Management (admin)
+# --------------------------------------------------------------------------
+@app.get(f"{PREFIX}/admin/metrics")
+def admin_metrics(admin: str = Depends(admin_user)):
+    return {"metrics": accounts.metrics()}
+
+
+class MetricRequest(BaseModel):
+    metric: str = Field(min_length=1, max_length=100)
+    description: str = Field(default="", max_length=1000)
+
+
+@app.post(f"{PREFIX}/admin/metrics", status_code=201)
+def admin_add_metric(request: MetricRequest, admin: str = Depends(admin_user)):
+    accounts.add_metric(request.metric, request.description)
+    return {"added": request.metric.strip()}
+
+
+# metric names contain '/' (rkB/s): query parameters, not path segments
+@app.delete(f"{PREFIX}/admin/metrics")
+def admin_delete_metrics(metric: list[str] = Query(min_length=1), admin: str = Depends(admin_user)):
+    return {"deleted": accounts.delete_metrics(metric)}
+
+
+@app.get(f"{PREFIX}/admin/headers")
+def admin_headers(admin: str = Depends(admin_user)):
+    return {"headers": accounts.headers()}
+
+
+class HeaderRequest(BaseModel):
+    header: str = Field(min_length=1, max_length=1000)
+    alias: str = Field(min_length=1, max_length=200)
+    keyword: str = Field(default="", max_length=20)
+    description: str = Field(default="", max_length=1000)
+
+
+class HeaderUpdateRequest(HeaderRequest):
+    original_header: str = Field(min_length=1, max_length=1000)
+
+
+@app.post(f"{PREFIX}/admin/headers", status_code=201)
+def admin_add_header(request: HeaderRequest, admin: str = Depends(admin_user)):
+    accounts.add_header(request.header, request.alias, request.keyword, request.description)
+    return {"added": request.alias}
+
+
+@app.put(f"{PREFIX}/admin/headers")
+def admin_update_header(request: HeaderUpdateRequest, admin: str = Depends(admin_user)):
+    accounts.update_header(
+        request.original_header, request.header, request.alias, request.keyword, request.description
+    )
+    return {"updated": request.alias}
+
+
+@app.delete(f"{PREFIX}/admin/headers")
+def admin_delete_header(header: str, admin: str = Depends(admin_user)):
+    accounts.delete_header(header)
+    return {"deleted": header}
+
+
+# --------------------------------------------------------------------------
+# Redis Management (admin)
+# --------------------------------------------------------------------------
+@app.get(f"{PREFIX}/admin/redis")
+def admin_redis(admin: str = Depends(admin_user)):
+    return accounts.redis_keys()
+
+
+@app.delete(f"{PREFIX}/admin/redis/fields")
+def admin_delete_redis_fields(
+    key: str, field: list[str] = Query(min_length=1), admin: str = Depends(admin_user)
+):
+    return {"deleted": accounts.delete_redis_fields(key, field)}
 
 
 # --------------------------------------------------------------------------
