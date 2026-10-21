@@ -215,6 +215,9 @@ def file_details(username: str, name: str) -> dict:
                 "header": entry["header"],
                 "alias": entry["alias"],
                 "metrics": entry["metrics"],
+                # per-device data (CPU, DEV, IFACE, ...) - same lookup the
+                # "Metrics on many devices" page of the UI filters with
+                "has_devices": bool(pl_h2.get_sub_device_from_header(entry["header"])),
             }
         )
     return {
@@ -269,6 +272,10 @@ def _select_devices(frame: HeaderFrame, devices: str | None) -> list[str | None]
 
 def _device_rows(frame: HeaderFrame, device: str | None, start: str | None, end: str | None) -> pl.DataFrame:
     rows = frame.by_device[device] if device is not None else frame.wide
+    return _time_filter(rows, start, end)
+
+
+def _time_filter(rows: pl.DataFrame, start: str | None, end: str | None) -> pl.DataFrame:
     if (start or end) and rows.height:
         # same bound semantics as the main API (HH:MM[:SS] or ISO timestamp)
         reference = pd.Timestamp(rows["date"].min())
@@ -338,6 +345,87 @@ def series(
         "time_basis": "sar wall-clock time as epoch milliseconds (interpreted as UTC)",
         "series": result,
     }
+
+
+def threshold(
+    username: str,
+    name: str,
+    header_or_alias: str,
+    metric: str,
+    low: float | None = None,
+    high: float | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    limit: int = 500,
+) -> dict:
+    """Which devices hit low <= metric <= high, and when ("Metrics on many
+    devices", display_multi.py). Without low/high only the metric's value
+    range is returned - what the threshold slider needs."""
+    frame = header_frame(username, name, header_or_alias)
+    if not frame.devices:
+        raise ServiceError(f"Header {frame.alias!r} has no devices")
+    if metric not in frame.metrics:
+        raise ServiceError(f"Unknown metric {metric!r}; available: {frame.metrics}")
+    values = frame.wide.select(
+        pl.col("date"), pl.col("sub_device").alias("device"), pl.col(metric).alias("value")
+    ).drop_nulls("value")
+    result: dict = {
+        "header": frame.header,
+        "alias": frame.alias,
+        "metric": metric,
+        "value_min": values["value"].min(),
+        "value_max": values["value"].max(),
+        "start": str(values["date"].min()),
+        "end": str(values["date"].max()),
+    }
+    if low is None and high is None:
+        return result
+
+    hits = values
+    if low is not None:
+        hits = hits.filter(pl.col("value") >= low)
+    if high is not None:
+        hits = hits.filter(pl.col("value") <= high)
+    if hits.height:
+        hits = _time_filter(hits, start, end)
+    # same device order as _natural: 'all', CPUs numerically, then names
+    hits = hits.sort(
+        [
+            pl.col("date"),
+            pl.when(pl.col("device") == "all").then(0).when(pl.col("device").str.contains(r"^\d+$")).then(1).otherwise(2),
+            pl.col("device").cast(pl.Int64, strict=False),
+            pl.col("device"),
+        ],
+        nulls_last=True,
+        maintain_order=True,
+    )
+    per_device = (
+        hits.group_by("device")
+        .agg(
+            pl.len().alias("count"),
+            pl.col("date").min().alias("first"),
+            pl.col("date").max().alias("last"),
+            pl.col("value").max().alias("peak"),
+        )
+        .with_columns(pl.col("first").dt.epoch("ms"), pl.col("last").dt.epoch("ms"))
+    )
+    shown = hits.head(limit).with_columns(pl.col("date").dt.epoch("ms").alias("time"))
+    result.update(
+        {
+            "matches": hits.height,
+            "devices": sorted(per_device.to_dicts(), key=lambda d: _natural(d["device"])),
+            "rows": shown.select("time", "device", "value").to_dicts(),
+            "rows_returned": shown.height,
+        }
+    )
+    return result
+
+
+def _natural(device: str) -> tuple:
+    """'all' first, then numbers numerically (CPU 2 before CPU 10), then names."""
+    if device == "all":
+        return (0, 0, "")
+    return (1, int(device), "") if device.isdigit() else (2, 0, device)
 
 
 _QUANTILES = {"25%": 0.25, "50%": 0.5, "75%": 0.75}

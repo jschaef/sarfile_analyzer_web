@@ -157,6 +157,23 @@ def series(
     return data.series(username, name, header, devices, metrics, start, end, max_points)
 
 
+@app.get(f"{PREFIX}/files/{{name}}/threshold")
+def threshold(
+    name: str,
+    header: str,
+    metric: str,
+    low: float | None = Query(default=None, alias="min", description="lower bound (inclusive)"),
+    high: float | None = Query(default=None, alias="max", description="upper bound (inclusive)"),
+    start: str | None = None,
+    end: str | None = None,
+    limit: int = Query(default=500, ge=0, le=100_000, description="rows to return"),
+    username: str = Depends(current_user),
+):
+    """Devices where low <= metric <= high ("Metrics on many devices").
+    Without min/max only the value range of the metric is returned."""
+    return data.threshold(username, name, header, metric, low, high, start, end, limit)
+
+
 @app.get(f"{PREFIX}/files/{{name}}/statistics")
 def statistics(
     name: str,

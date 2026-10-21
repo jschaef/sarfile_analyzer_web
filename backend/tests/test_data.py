@@ -30,7 +30,9 @@ def test_file_details(client, auth, uploaded):
     assert info["restarts"] == [
         {"time": 1790856000000, "iso": "2026-10-01T12:00:00", "raw": "12:00:00 LINUX RESTART"}
     ]
-    assert "CPU" in {h["alias"] for h in info["headers"]}
+    has_devices = {h["alias"]: h["has_devices"] for h in info["headers"]}
+    assert has_devices["CPU"] and has_devices["Block Devices"] and has_devices["IFACE"]
+    assert not has_devices["Load"] and not has_devices["Memory utilization"]
 
 
 def test_header_with_slash_in_alias(client, auth, uploaded):
@@ -156,10 +158,14 @@ def test_duplicate_timestamps_are_reported(client, auth, tmp_path):
         client.delete(f"/api/v2/files/{name}", headers=auth)
 
 
-def test_delete(client, auth):
-    with FIXTURE.open("rb") as handle:
+def test_delete(client, auth, tmp_path):
+    # own host name: the shared fixture file must survive this test
+    copy = tmp_path / "y.txt"
+    copy.write_text(FIXTURE.read_text().replace("(synthetic-host)", "(delete-host)", 1))
+    with copy.open("rb") as handle:
         name = client.post(
             "/api/v2/files", headers=auth, files=[("files", ("y.txt", handle))]
         ).json()["uploaded"][0]["name"]
+    assert "delete-host" in name
     assert client.delete(f"/api/v2/files/{name}", headers=auth).status_code == 200
     assert client.get(f"/api/v2/files/{name}", headers=auth).status_code == 404
