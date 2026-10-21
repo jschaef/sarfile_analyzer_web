@@ -23,6 +23,8 @@ import { DESCRIBE_KEYS, describe } from "@/lib/stats";
 import { cn } from "@/lib/utils";
 
 const DAY_MS = 24 * 3600 * 1000;
+// the diagram's restarts come with each file's line (lib/echarts-option.ts)
+const NO_RESTARTS: number[] = [];
 
 // "Multiple Sar Files" of the Streamlit app (multi_files_pl.py): the same
 // heading/device/metric across several files, either laid over one 24-hour
@@ -419,13 +421,11 @@ function DiagramView({
             name: ordered[i].name,
             x: response.series[0].x.map(toAxis),
             y: response.series[0].values[metric],
+            // drawn in the colour of the file's line
+            restarts: ordered[i].restarts.map((r) => toAxis(r.time)),
           }))
         : null,
     [data.data, ordered, metric, toAxis],
-  );
-  const restarts = useMemo(
-    () => [...new Set(ordered.flatMap((info) => info.restarts.map((r) => toAxis(r.time))))],
-    [ordered, toAxis],
   );
   const title = [alias, device, metric].filter(Boolean).join(" · ");
 
@@ -452,7 +452,7 @@ function DiagramView({
             chart={
               <LineChart
                 lines={lines}
-                restarts={restarts}
+                restarts={NO_RESTARTS}
                 xLabel={consecutive ? "{MM}-{dd} {HH}:{mm}" : "{HH}:{mm}"}
                 dark={resolvedTheme === "dark"}
                 selected={selected}
