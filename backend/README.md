@@ -66,6 +66,7 @@ the caches to the host.
 | GET · POST · DELETE | `/admin/metrics` | metric descriptions · add · delete (`?metric=a&metric=b`) |
 | GET · POST · PUT · DELETE | `/admin/headers` | headings (header, alias, keyword, description) · add · update (`original_header`) · delete (`?header=`) |
 | GET · DELETE | `/admin/redis` · `/admin/redis/fields` | Redis keys with hash fields · delete fields of a hash |
+| GET · PUT | `/admin/settings` | runtime settings of `config.py` with their source (`admin`, `environment`, `default`); PUT `{"values": {name: value}}`, `null` removes the stored value. Secrets (Redis password) are never returned. 501 with a sarfile_analyzer_ng older than `config.EDITABLE_SETTINGS` |
 
 `/admin/*` needs the role `admin`. The role is read from data.db on every
 request (a role change applies without a new login), and every request checks
@@ -116,6 +117,10 @@ DB Management and Redis Management – no own tables, no own schema:
   `sqlite2_polars.invalidate_table_cache` so every process sees the change
 - logins: `handle_user_status.add_record`, `increment_login_counter`,
   `remove_old_logins` (the login history in `$UPLOAD_DIR/config`)
+- settings: `config.update_settings` writes `$UPLOAD_DIR/config/settings.json`
+  (mode 0600); `Config.<name>` returns a stored value before the environment
+  variable, in every process, without a restart. `redis_mng` reconnects when
+  the Redis settings change
 
 `sql_stuff` keeps one module-level SQLAlchemy session; sar-web-api serializes
 every use of it with a lock. In production that is the server's `data.db`
@@ -147,6 +152,8 @@ API's `/data` and `/statistics`):
 - `sql_stuff`: the functions above, `get_role`, `view_all_users`,
   `ret_all_roles`, the models `User`/`Metrics`/`Headings`, and its globals
   `data_db`/`engine`/`Session`/`session` (rebound by `SAR_WEB_DB`)
+- `config`: `EDITABLE_SETTINGS`, `SECRET_SETTINGS`, `stored_settings`,
+  `update_settings` (Settings page)
 - `handle_user_status`, `redis_mng.get_rs`, `hashing.verify_password`,
   `validation.is_valid_username`, `api.services.EXCLUDED_UPLOAD_DIRS`,
   `config.Config`

@@ -67,6 +67,11 @@ async def _forbidden(_, exc: accounts.Forbidden):
     return JSONResponse(status_code=403, content={"detail": str(exc)})
 
 
+@app.exception_handler(accounts.Unsupported)
+async def _unsupported(_, exc: accounts.Unsupported):
+    return JSONResponse(status_code=501, content={"detail": str(exc)})
+
+
 @app.get(f"{PREFIX}/health")
 def health():
     return {"status": "ok"}
@@ -368,3 +373,21 @@ def statistics(
 def metrics(username: str = Depends(current_user)):
     """Descriptions of the sar metrics (the "man pages" of the Streamlit UI)."""
     return {"metrics": data.metric_descriptions()}
+
+
+# --------------------------------------------------------------------------
+# Settings (admin): the runtime-editable values of config.py
+# --------------------------------------------------------------------------
+@app.get(f"{PREFIX}/admin/settings")
+def admin_settings(admin: str = Depends(admin_user)):
+    return {"settings": accounts.settings()}
+
+
+class SettingsRequest(BaseModel):
+    # name -> new value; null removes the admin value (back to the environment)
+    values: dict[str, str | int | bool | None]
+
+
+@app.put(f"{PREFIX}/admin/settings")
+def admin_update_settings(request: SettingsRequest, admin: str = Depends(admin_user)):
+    return {"settings": accounts.update_settings(request.values)}

@@ -202,7 +202,7 @@ def test_redis_disabled(client, auth):
 
 
 @pytest.fixture
-def redis_server(monkeypatch, tmp_path):
+def redis_server(tmp_path):
     """A throw-away redis-server on a free port; skipped without one."""
     binary = shutil.which("redis-server")
     if not binary:
@@ -223,18 +223,26 @@ def redis_server(monkeypatch, tmp_path):
             break
         except redis.ConnectionError:
             time.sleep(0.1)
-    monkeypatch.setattr(accounts.Config, "redis_enabled", True)
-    monkeypatch.setattr(accounts.Config, "redis_port", port)
-    monkeypatch.setattr(accounts.redis_mng, "_redis_cache", {})
-    monkeypatch.setattr(accounts.redis_mng, "_redis_disabled", False)
-    yield client
+    yield client, port
+    accounts.config.update_settings({"redis_enabled": None, "redis_port": None, "redis_host": None})
     process.terminate()
     process.wait()
 
 
 def test_redis_keys(client, auth, redis_server):
-    redis_server.hset("admin", mapping={"file-a": "1", "file-b": "2"})
-    redis_server.set("plain", "x")
+    redis, port = redis_server
+    redis.hset("admin", mapping={"file-a": "1", "file-b": "2"})
+    redis.set("plain", "x")
+    # Redis is switched on in the settings - at first with a wrong port
+    put = client.put(
+        f"{API}/admin/settings",
+        headers=auth,
+        json={"values": {"redis_enabled": True, "redis_host": "127.0.0.1", "redis_port": 1}},
+    )
+    assert put.status_code == 200, put.text
+    assert client.get(f"{API}/admin/redis", headers=auth).json()["reachable"] is False
+    # the corrected port is probed again, no restart needed
+    client.put(f"{API}/admin/settings", headers=auth, json={"values": {"redis_port": port}})
     body = client.get(f"{API}/admin/redis", headers=auth).json()
     assert body["enabled"] is True and body["reachable"] is True
     assert body["keys"] == [
@@ -245,4 +253,49 @@ def test_redis_keys(client, auth, redis_server):
         f"{API}/admin/redis/fields", headers=auth, params={"key": "admin", "field": ["file-a", "nope"]}
     )
     assert response.json() == {"deleted": 1}
-    assert redis_server.hkeys("admin") == ["file-b"]
+    assert redis.hkeys("admin") == ["file-b"]
+
+
+def test_settings(client, auth):
+    body = client.get(f"{API}/admin/settings", headers=auth).json()["settings"]
+    by_name = {entry["name"]: entry for entry in body}
+    assert by_name["admin_email"]["source"] in ("environment", "default")
+    assert by_name["redis_enabled"] == {
+        "name": "redis_enabled", "type": "bool", "min": None, "max": None,
+        "env_var": "REDIS_ENABLED", "source": "environment", "secret": False, "value": False,
+    }
+    original = by_name["admin_email"]["value"]
+
+    values = {"admin_email": "sar-admin@example.org", "admin_communication": "teams", "max_header_count": 4}
+    put = client.put(f"{API}/admin/settings", headers=auth, json={"values": values})
+    assert put.status_code == 200, put.text
+    changed = {entry["name"]: entry for entry in put.json()["settings"]}
+    assert changed["admin_email"]["source"] == "admin"
+    # the public info (help, FAQ, Compare Metrics) follows at once
+    info = client.get(f"{API}/info").json()
+    assert info["admin_email"] == "sar-admin@example.org"
+    assert info["admin_communication"] == "teams"
+    assert info["max_header_count"] == 4
+    # and so does sarfile_analyzer_ng's own Config
+    assert accounts.Config.admin_email == "sar-admin@example.org"
+
+    # a secret is stored but never returned
+    client.put(f"{API}/admin/settings", headers=auth, json={"values": {"redis_password": "s3cret"}})
+    listed = client.get(f"{API}/admin/settings", headers=auth).text
+    assert "s3cret" not in listed
+
+    for bad in [{"redis_port": 70000}, {"admin_email": "nope"}, {"max_header_count": "4"}, {"debug": True}]:
+        response = client.put(f"{API}/admin/settings", headers=auth, json={"values": bad})
+        assert response.status_code == 400, bad
+
+    reset = {name: None for name in [*values, "redis_password"]}
+    client.put(f"{API}/admin/settings", headers=auth, json={"values": reset})
+    assert client.get(f"{API}/info").json()["admin_email"] == original
+
+
+def test_settings_are_admin_only(client):
+    signup(client, "judy")
+    headers = token_of(client, "judy")
+    assert client.get(f"{API}/admin/settings", headers=headers).status_code == 403
+    response = client.put(f"{API}/admin/settings", headers=headers, json={"values": {"admin_email": "a@b.c"}})
+    assert response.status_code == 403

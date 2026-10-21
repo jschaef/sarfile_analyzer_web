@@ -1,5 +1,5 @@
 """Accounts and administration: users, roles, login history, the metric and
-heading tables, Redis keys.
+heading tables, Redis keys, the admin settings of config.py.
 
 Every read and write goes through sarfile_analyzer_ng's own functions
 (`sql_stuff`, `handle_user_status`, `sqlite2_polars`, `redis_mng`) - the code
@@ -21,6 +21,7 @@ from pathlib import Path
 
 from . import bootstrap  # noqa: F401  (must come before code/ imports)
 
+import config  # noqa: E402
 import handle_user_status  # noqa: E402
 import hashing  # noqa: E402
 import redis_mng  # noqa: E402
@@ -45,6 +46,10 @@ class Conflict(Exception):
 
 class Forbidden(Exception):
     pass
+
+
+class Unsupported(Exception):
+    """The sarfile_analyzer_ng checkout is too old for this feature."""
 
 
 _db_lock = threading.RLock()
@@ -73,6 +78,7 @@ def info() -> dict:
         "code_url": CODE_URL,
         "web_code_url": WEB_CODE_URL,
         "signup": signup_enabled(),
+        "max_header_count": Config.max_header_count,
     }
 
 
@@ -352,3 +358,51 @@ def delete_redis_fields(key: str, fields: list[str]) -> int:
         return int(rs.hdel(key, *fields))
     except Exception as exc:
         raise ServiceError(f"Redis error: {exc}")
+
+
+# --------------------------------------------------------------------------
+# admin settings (config.py: values stored in $UPLOAD_DIR/config/settings.json
+# take precedence over the environment)
+# --------------------------------------------------------------------------
+def _settings_support() -> None:
+    if not hasattr(config, "EDITABLE_SETTINGS"):
+        raise Unsupported("Settings need a newer sarfile_analyzer_ng (config.EDITABLE_SETTINGS)")
+
+
+def settings() -> list[dict]:
+    _settings_support()
+    stored = config.stored_settings()
+    result = []
+    for name, (kind, env_var, low, high) in config.EDITABLE_SETTINGS.items():
+        secret = name in config.SECRET_SETTINGS
+        value = getattr(Config, name)
+        if name in stored:
+            source = "admin"
+        elif env_var in os.environ:
+            source = "environment"
+        else:
+            source = "default"
+        result.append(
+            {
+                "name": name,
+                "type": kind.__name__,
+                "min": low,
+                "max": high,
+                "env_var": env_var,
+                "source": source,
+                "secret": secret,
+                # a secret is never sent back, only whether one is set
+                "value": bool(value) if secret else value,
+            }
+        )
+    return result
+
+
+def update_settings(changes: dict) -> list[dict]:
+    """Store settings; None removes the admin value (back to the environment)."""
+    _settings_support()
+    try:
+        config.update_settings(changes)
+    except ValueError as exc:
+        raise ServiceError(str(exc))
+    return settings()
