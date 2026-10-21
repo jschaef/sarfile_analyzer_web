@@ -42,6 +42,17 @@ Detailed Metrics, Compare Metrics and Multiple SAR Files use the existing
 combined statistics of all files in the browser (`lib/stats.ts`, same numbers
 as pandas `describe()`).
 
+## Phase 4: accounts and admin pages
+
+`/api/v1` has `POST /users` (admin) and nothing else for accounts. sar-web-api
+adds what the Streamlit pages Signup, Self Service, User Management,
+DB Management, Redis Management and Info need: `/signup`, `/info`,
+`/users/me/password` and `/admin/*` (users, roles, passwords, login history,
+metric and heading tables, Redis hash fields) – list in
+[backend/README.md](backend/README.md). The writes go through
+sarfile_analyzer_ng's own functions into its `data.db`; nothing in that project
+changes. The TODO page was left out on purpose.
+
 ## Still open / new limits
 
 - **Statistics CSV export (12), parse progress (14), SSO (15).**
