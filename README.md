@@ -170,6 +170,8 @@ E2E:
   added slot); Multiple SAR Files (the fixture and a copy shifted by one day:
   overlay, statistics, consecutive, summary); the login form post (303 +
   httpOnly cookie, wrong password, cross-site 403).
+- `e2e/files.spec.ts`: Manage SAR Files with three uploads – search, select
+  the shown files ("all", partial selection), cancel, delete the selection.
 - `e2e/account.spec.ts`: signup (password mismatch, duplicate name, form post
   without JavaScript), no admin menu and "Admins only" for a normal user, Self
   Service, User Management (own row locked, role change seen by the user's open

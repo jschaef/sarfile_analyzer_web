@@ -1,12 +1,13 @@
 "use client";
 
-import { BarChart3Icon, FileUpIcon, RefreshCwIcon, Trash2Icon, UploadIcon } from "lucide-react";
+import { BarChart3Icon, FileUpIcon, RefreshCwIcon, SearchIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -27,7 +28,27 @@ export function FileManager() {
   const [dragging, setDragging] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  // several files at once (Streamlit: "Delete Sar Files" multiselect)
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmingBulk, setConfirmingBulk] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
+
+  const shown = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!files || !needle) return files;
+    return files.filter((file) => `${file.name} ${file.host ?? ""}`.toLowerCase().includes(needle));
+  }, [files, search]);
+  // only files that still exist count (another tab may have deleted some)
+  const chosen = useMemo(() => (files ?? []).map((f) => f.name).filter((name) => selected.has(name)), [files, selected]);
+  const shownChosen = (shown ?? []).filter((file) => selected.has(file.name)).length;
+  const allShownChosen = shown !== null && shown.length > 0 && shownChosen === shown.length;
+
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = shownChosen > 0 && !allShownChosen;
+  }, [shownChosen, allShownChosen]);
 
   const refresh = useCallback(async () => {
     try {
@@ -77,6 +98,43 @@ export function FileManager() {
       setDeleting(null);
       setConfirming(null);
     }
+  }
+
+  function toggle(name: string, on: boolean) {
+    const next = new Set(selected);
+    if (on) next.add(name);
+    else next.delete(name);
+    setSelected(next);
+  }
+
+  // "all" means all files the search shows; the others keep their state
+  function toggleShown(on: boolean) {
+    const next = new Set(selected);
+    for (const file of shown ?? []) {
+      if (on) next.add(file.name);
+      else next.delete(file.name);
+    }
+    setSelected(next);
+  }
+
+  async function removeSelected() {
+    setBulkDeleting(true);
+    const failed: string[] = [];
+    // one after the other: each delete also clears the file's Redis entry
+    for (const name of chosen) {
+      try {
+        await api.deleteFile(name);
+      } catch (error) {
+        failed.push(name);
+        toast.error(`${name}: ${error instanceof Error ? error.message : "Delete failed"}`);
+      }
+    }
+    const deleted = chosen.length - failed.length;
+    if (deleted > 0) toast.success(`${deleted} file(s) deleted`);
+    setSelected(new Set(failed));
+    setConfirmingBulk(false);
+    setBulkDeleting(false);
+    await refresh();
   }
 
   function onDrop(event: DragEvent<HTMLDivElement>) {
@@ -152,7 +210,16 @@ export function FileManager() {
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="space-y-1.5">
             <CardTitle>Your files</CardTitle>
-            <CardDescription>{files ? `${files.length} file(s)` : "Loading…"}</CardDescription>
+            <CardDescription>
+              {files && shown
+                ? [
+                    shown.length === files.length ? `${files.length} file(s)` : `${shown.length} of ${files.length} file(s)`,
+                    chosen.length > 0 && `${chosen.length} selected`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                : "Loading…"}
+            </CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={() => void refresh()}>
             <RefreshCwIcon /> Refresh
@@ -170,9 +237,64 @@ export function FileManager() {
             <p className="py-6 text-center text-sm text-muted-foreground">No files uploaded yet.</p>
           )}
           {files && files.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <div className="relative w-72">
+                <SearchIcon className="absolute top-2 left-2 size-4 text-muted-foreground" />
+                <Input
+                  aria-label="Search files"
+                  placeholder="Filter by name or host"
+                  className="pl-8"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </div>
+              <div className="ml-auto flex gap-2">
+                {confirmingBulk ? (
+                  <>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={bulkDeleting || chosen.length === 0}
+                      onClick={() => void removeSelected()}
+                      data-testid="confirm-delete-selected"
+                    >
+                      {bulkDeleting ? "Deleting…" : `Delete ${chosen.length} file(s)`}
+                    </Button>
+                    <Button variant="ghost" size="sm" disabled={bulkDeleting} onClick={() => setConfirmingBulk(false)}>
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={chosen.length === 0}
+                    onClick={() => setConfirmingBulk(true)}
+                    data-testid="delete-selected"
+                  >
+                    <Trash2Icon /> Delete selected ({chosen.length})
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+          {shown && shown.length === 0 && files && files.length > 0 && (
+            <p className="py-6 text-center text-sm text-muted-foreground">No file matches &quot;{search}&quot;.</p>
+          )}
+          {shown && shown.length > 0 && (
             <Table data-testid="file-table">
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-0">
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      aria-label={search.trim() ? "Select all shown files" : "Select all files"}
+                      checked={allShownChosen}
+                      onChange={(event) => toggleShown(event.target.checked)}
+                      data-testid="select-all-files"
+                    />
+                  </TableHead>
                   <TableHead>File</TableHead>
                   <TableHead>Host</TableHead>
                   <TableHead>SAR date</TableHead>
@@ -181,8 +303,16 @@ export function FileManager() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {files.map((file) => (
+                {shown.map((file) => (
                   <TableRow key={file.name} data-testid="file-row" data-file={file.name}>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${file.name}`}
+                        checked={selected.has(file.name)}
+                        onChange={(event) => toggle(file.name, event.target.checked)}
+                      />
+                    </TableCell>
                     <TableCell className="font-mono text-xs">{file.name}</TableCell>
                     <TableCell>{file.host ?? "–"}</TableCell>
                     <TableCell>{file.sar_date ?? "–"}</TableCell>
