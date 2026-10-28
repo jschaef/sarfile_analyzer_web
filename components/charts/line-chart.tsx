@@ -33,6 +33,7 @@ type Props = {
   columns?: Columns;
   lines?: Line[];
   xLabel?: string;
+  pointerFormat?: string;
   restarts: number[];
   dark: boolean;
   selected: Record<string, boolean>;
@@ -42,7 +43,7 @@ type Props = {
 };
 
 export function LineChart(props: Props) {
-  const { columns, lines, xLabel, restarts, dark, selected, onSelectedChange, height = 380, label } = props;
+  const { columns, lines, xLabel, pointerFormat, restarts, dark, selected, onSelectedChange, height = 380, label } = props;
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
   const selectedRef = useRef(selected);
@@ -71,7 +72,7 @@ export function LineChart(props: Props) {
     chart.on("legendselectchanged", (event) => {
       onSelectedRef.current({ ...(event as { selected: Record<string, boolean> }).selected });
     });
-    chart.setOption(buildLineOption({ columns, lines, xLabel, restarts, dark, selected: selectedRef.current }));
+    chart.setOption(buildLineOption({ columns, lines, xLabel, pointerFormat, restarts, dark, selected: selectedRef.current }));
 
     const observer = new ResizeObserver(() => chart.resize());
     observer.observe(element);
@@ -80,7 +81,7 @@ export function LineChart(props: Props) {
       chart.dispose();
       chartRef.current = null;
     };
-  }, [columns, lines, xLabel, restarts, dark]);
+  }, [columns, lines, xLabel, pointerFormat, restarts, dark]);
 
   useEffect(() => {
     chartRef.current?.setOption({ legend: { selected } });

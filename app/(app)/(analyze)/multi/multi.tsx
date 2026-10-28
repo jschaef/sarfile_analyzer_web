@@ -454,6 +454,8 @@ function DiagramView({
                 lines={lines}
                 restarts={NO_RESTARTS}
                 xLabel={consecutive ? "{MM}-{dd} {HH}:{mm}" : "{HH}:{mm}"}
+                // the overlay's day is 1970-01-01 - only the clock time means something
+                pointerFormat={consecutive ? undefined : "{HH}:{mm}:{ss}"}
                 dark={resolvedTheme === "dark"}
                 selected={selected}
                 onSelectedChange={setSelected}

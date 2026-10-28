@@ -25,6 +25,10 @@ export type LineChartInput = {
   lines?: Line[];
   // x axis label format; one sar file covers one day, so clock time by default
   xLabel?: string;
+  // tooltip, axis pointer and zoom slider; ECharts' full date by default. The
+  // 24-hour overlay of Multiple SAR Files puts every file on 1970-01-01 and
+  // shows the clock time only.
+  pointerFormat?: string;
   restarts?: number[];
   dark?: boolean;
   // legend state: metric -> visible; missing keys count as visible
@@ -33,8 +37,24 @@ export type LineChartInput = {
   sampling?: LineSeriesOption["sampling"];
 };
 
+// ECharts' time template ({yyyy} {MM} {dd} {HH} {mm} {ss}) in UTC like the
+// axis (useUTC); written out because this file takes no runtime imports.
+export function formatTime(ms: number, template: string): string {
+  const date = new Date(ms);
+  const parts: Record<string, number> = {
+    yyyy: date.getUTCFullYear(),
+    MM: date.getUTCMonth() + 1,
+    dd: date.getUTCDate(),
+    HH: date.getUTCHours(),
+    mm: date.getUTCMinutes(),
+    ss: date.getUTCSeconds(),
+  };
+  return template.replace(/\{(yyyy|MM|dd|HH|mm|ss)\}/g, (_, key: string) => String(parts[key]).padStart(2, "0"));
+}
+
 export function buildLineOption(input: LineChartInput): EChartsOption {
-  const { columns, lines, restarts = [], dark = false, selected = {}, sampling = "lttb" } = input;
+  const { columns, lines, restarts = [], dark = false, selected = {}, sampling = "lttb", pointerFormat } = input;
+  const pointerLabel = pointerFormat ? (value: number) => formatTime(value, pointerFormat) : undefined;
   const xLabel = input.xLabel ?? "{HH}:{mm}";
   const text = dark ? "#d4d4d4" : "#404040";
   const grid = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
@@ -153,6 +173,10 @@ export function buildLineOption(input: LineChartInput): EChartsOption {
       // plain clock times instead of ECharts' default month/day labels at day
       // boundaries (one sar file covers one day)
       axisLabel: { color: text, hideOverlap: true, formatter: xLabel },
+      // also the heading of the tooltip
+      ...(pointerLabel && {
+        axisPointer: { label: { formatter: (params) => pointerLabel(Number(params.value)) } },
+      }),
       axisLine: { lineStyle: { color: grid } },
       splitLine: { show: false },
     },
@@ -164,7 +188,14 @@ export function buildLineOption(input: LineChartInput): EChartsOption {
     },
     dataZoom: [
       { type: "inside", xAxisIndex: 0, filterMode: "filter" },
-      { type: "slider", xAxisIndex: 0, height: 20, bottom: 8, filterMode: "filter" },
+      {
+        type: "slider",
+        xAxisIndex: 0,
+        height: 20,
+        bottom: 8,
+        filterMode: "filter",
+        ...(pointerLabel && { labelFormatter: (value: number) => pointerLabel(value) }),
+      },
     ],
     series,
   };

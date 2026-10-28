@@ -100,6 +100,13 @@ test.describe.serial("analysis views", () => {
     const diagram = page.getByTestId("multi-diagram");
     await expect(diagram).toContainText("2 file(s) laid over one 24-hour axis");
     await expect(rendered("[data-testid=multi-diagram]")).toHaveCount(1);
+    // the overlay's day is a placeholder (1970-01-01): the tooltip shows the clock time only
+    const chart = diagram.locator("[data-testid=echart]");
+    const box = (await chart.boundingBox())!;
+    await chart.hover({ position: { x: box.width / 2, y: box.height / 2 } });
+    const tooltip = chart.getByText(/^\d{2}:\d{2}:\d{2}$/);
+    await expect(tooltip.first()).toBeVisible();
+    await expect(chart).not.toContainText("1970");
 
     await page.getByRole("tab", { name: "Statistics" }).click();
     await expect(page.getByTestId("combined-statistics")).toContainText("All 2 files together");
