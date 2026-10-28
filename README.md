@@ -23,7 +23,8 @@ Features:
   `SAR_WEB_SIGNUP=false` in sar-web-api); you are logged in right away. The
   login page links to it and names the admin contact for forgotten passwords.
 - **Manage SAR Files**: list (host, sar date, size), upload (drag & drop,
-  several files, progress), delete.
+  several files, progress), delete one file or several at once (search by
+  name or host, select all shown, delete the selection after a confirmation).
 - **Graphical Overview**: the overview page of the Streamlit app with header/alias
   selection (defaults: CPU, Kernel tables, Load, Memory utilization, Swap
   utilization), per-chart metric selection, start/end from the file's real
@@ -39,9 +40,9 @@ Features:
   chart the chosen devices in one diagram.
 - **Compare Metrics**: up to six heading/device/metric combinations in one chart.
 - **Multiple SAR Files**: the same heading/device/metric from several files,
-  either laid over one 24-hour axis or one after another on the real time axis
-  ("consecutive"), with a time range, combined and per-file statistics, and a
-  summary per file.
+  either laid over one 24-hour axis (clock time only, restarts in each file's
+  colour) or one after another on the real time axis ("consecutive"), with a
+  time range, combined and per-file statistics, and a summary per file.
 
 - **Self Service** (click your user name): change your own password (needs the
   current one).

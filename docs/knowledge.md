@@ -1,7 +1,7 @@
 # Wissen zu sarfile_analyzer_web
 
 Gesammelte Erkenntnisse aus der Entwicklung (Phasen 2–4, Admin-Settings,
-Lab-Deployment, Stand 21.10.2026). Jeder `##`-Abschnitt steht für sich und
+Lab-Deployment, Stand 28.10.2026). Jeder `##`-Abschnitt steht für sich und
 kann einzeln in eine Wissens-Collection (z. B. cloud-memory) übernommen
 werden. Kurzfassung für Agenten: [`../CLAUDE.md`](../CLAUDE.md).
 
@@ -82,6 +82,21 @@ werden. Kurzfassung für Agenten: [`../CLAUDE.md`](../CLAUDE.md).
   Restarts: eigene, nicht schaltbare Serie „LINUX RESTART“ (rot, gestrichelt);
   bei `lines` (Multiple SAR Files) hat jede Datei ihre Restarts als
   markLine in ihrer Linienfarbe, die mit der Datei aus-/eingeblendet werden.
+- **Overlay in Multiple SAR Files**: jeder Zeitstempel wird auf seine
+  Uhrzeit reduziert (`x % DAY_MS` in `multi.tsx`), damit liegen alle Dateien
+  auf dem 01.01.1970 (Unix-Nullpunkt). Die Achse zeigt `HH:mm` (`xLabel`);
+  Tooltip-Kopf, Achsen-Marker und Zoom-Regler formatiert
+  `pointerFormat` (`{HH}:{mm}:{ss}`, Helfer `formatTime` in
+  `lib/echarts-option.ts`, ohne Laufzeit-Imports). „consecutive“ und alle
+  Ein-Datei-Diagramme zeigen das echte Datum. Streamlit löst das anders:
+  dort wird ein Tag der Auswahl als Basis genommen und die anderen Dateien
+  auf diesen Tag gelegt; angezeigt wird auch dort nur die Uhrzeit.
+- **Manage SAR Files** (`app/(app)/files/file-manager.tsx`): Suchfeld nach
+  Name oder Host, Checkbox pro Datei, Kopf-Checkbox wählt alle *angezeigten*
+  Dateien (halb gesetzt bei Teilauswahl), „Delete selected (n)“ mit
+  Rückfrage. Gelöscht wird nacheinander über `DELETE /api/v2/files/{name}`
+  (räumt auch den Redis-Eintrag ab); Fehlschläge bleiben ausgewählt.
+  Entspricht „Delete Sar Files“ (Multiselect) in der Streamlit-App.
 - `components/help-note.tsx`: `useInfo()` lädt `/api/v2/info` einmal pro
   Seitenaufruf (Modul-Cache, `refreshInfo()` nach Settings-Änderung).
   Liefert Admin-Kontakt, Signup an/aus, `max_header_count`, `streamlit_url`.
@@ -139,7 +154,7 @@ werden. Kurzfassung für Agenten: [`../CLAUDE.md`](../CLAUDE.md).
   wenn sich der Hash der Seed-`data.db` geändert hat**. Redis-Test startet
   einen echten `redis-server`, falls vorhanden. Stand: 54 Tests.
 - Frontend: `npm run lint`, `npm run typecheck`, `npm run build`,
-  `npx playwright test` (20 Tests; real-file und Screenshots nur mit Env).
+  `npx playwright test` (21 Tests; real-file und Screenshots nur mit Env).
 - Playwright nutzt den **Production-Build** (`next start`): vorher
   `npm run build` – und zwar **mit Standard-API-URL** (8200). Ein Build mit
   `SAR_WEB_API_URL=…:8300` (Lab) lässt die E2E-Tests mit ECONNREFUSED scheitern.
@@ -207,7 +222,8 @@ werden. Kurzfassung für Agenten: [`../CLAUDE.md`](../CLAUDE.md).
   Admin-Settings (die TODO-Seite der Streamlit-App entfällt).
 - Danach direkt auf `main` (von Jochen gemergt): Lab-Deployment,
   Streamlit-Link-Settings, Restart-Farben in Multiple SAR Files,
-  Upload direkt über nginx.
+  Upload direkt über nginx, Mehrfachauswahl zum Löschen in Manage SAR Files
+  (`8eb9728`), Uhrzeit statt 1970 im Overlay (`ad03098`).
 - In sarfile_analyzer_ng (Author Jochen): Benutzername `config` reserviert,
   Laufzeit-Settings, Sidebar-Link, `streamlit_url`, Lab-Doku.
 - Copilot-Reviews auf #2/#3 brachten drei echte Fixes (threshold-Zeitfenster,
