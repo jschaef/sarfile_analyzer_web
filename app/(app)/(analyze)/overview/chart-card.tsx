@@ -115,6 +115,12 @@ export function ChartCard(props: Props) {
               selected={selected}
               onSelectedChange={setSelected}
               label={`${label} chart`}
+              pdf={{
+                // <file>_<alias>[_<device>].pdf, as in the Streamlit overview
+                name: [file, alias, series.device],
+                title: subtitle ? `${label} (${subtitle})` : label,
+                subtitle: [file, start && end && `${start} - ${end}`].filter(Boolean).join(" · "),
+              }}
             />
           </TabsContent>
           <TabsContent value="statistics">

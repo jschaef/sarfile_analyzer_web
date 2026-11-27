@@ -13,6 +13,13 @@ export const PALETTE = [
 // Name of the internal series that carries the restart markers.
 export const RESTART_SERIES = "LINUX RESTART";
 
+// Icon of the "Save PDF" toolbox button, next to ECharts' own saveAsImage:
+// lucide's "file-down" as an outline, which is how toolbox icons are drawn
+// (iconStyle gives the stroke colour, the fill stays none).
+export const SAVE_PDF_ICON =
+  "path://M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" +
+  " M14 2v4a2 2 0 0 0 2 2h4 M12 18v-6 M9 15l3 3 3-3";
+
 // A line with its own time axis: charts that combine data from several
 // headers, devices or files, whose timestamps need not match. Restarts of a
 // line (one file of several) are drawn in its colour and hide with it.
@@ -35,6 +42,10 @@ export type LineChartInput = {
   selected?: Record<string, boolean>;
   // 'lttb' keeps peaks while drawing at most ~2 points per pixel
   sampling?: LineSeriesOption["sampling"];
+  // when set, the toolbox gets a second icon next to "Save PNG" that calls
+  // this. The PDF export itself lives in lib/chart-pdf.ts - this file must
+  // stay free of runtime imports (see the note at the top).
+  onSavePdf?: () => void;
 };
 
 // ECharts' time template ({yyyy} {MM} {dd} {HH} {mm} {ss}) in UTC like the
@@ -53,7 +64,7 @@ export function formatTime(ms: number, template: string): string {
 }
 
 export function buildLineOption(input: LineChartInput): EChartsOption {
-  const { columns, lines, restarts = [], dark = false, selected = {}, sampling = "lttb", pointerFormat } = input;
+  const { columns, lines, restarts = [], dark = false, selected = {}, sampling = "lttb", pointerFormat, onSavePdf } = input;
   const pointerLabel = pointerFormat ? (value: number) => formatTime(value, pointerFormat) : undefined;
   const xLabel = input.xLabel ?? "{HH}:{mm}";
   const text = dark ? "#d4d4d4" : "#404040";
@@ -161,6 +172,10 @@ export function buildLineOption(input: LineChartInput): EChartsOption {
         dataZoom: { yAxisIndex: "none", title: { zoom: "Zoom", back: "Undo zoom" } },
         restore: { title: "Reset" },
         saveAsImage: { title: "Save PNG", backgroundColor: dark ? "#171717" : "#ffffff" },
+        // custom features must be named "my..." (ECharts' ToolboxView)
+        ...(onSavePdf && {
+          mySavePdf: { show: true, title: "Save PDF", icon: SAVE_PDF_ICON, onclick: onSavePdf },
+        }),
       },
       iconStyle: { borderColor: text },
     },

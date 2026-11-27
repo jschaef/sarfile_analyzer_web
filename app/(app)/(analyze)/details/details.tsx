@@ -227,6 +227,11 @@ function HeaderView({
                 selected={selected}
                 onSelectedChange={setSelected}
                 label={`${title} chart`}
+                pdf={{
+                  name: [file, details.alias, device, mode === "details" ? metric : "summary"],
+                  title,
+                  subtitle: file,
+                }}
               />
             }
             data={() => <DataTable columns={columns} restarts={restarts} fileName={fileLabel} />}

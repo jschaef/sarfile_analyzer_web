@@ -12,8 +12,10 @@ import {
 } from "echarts/components";
 import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
-import { useEffect, useRef } from "react";
-import { buildLineOption, type Line } from "@/lib/echarts-option";
+import { useCallback, useEffect, useRef } from "react";
+import { toast } from "sonner";
+import { buildLineOption, type Line, type LineChartInput } from "@/lib/echarts-option";
+import type { ChartExport, ChartPdfMeta, ChartPdfSource } from "@/lib/chart-pdf";
 import type { Columns } from "@/lib/sar";
 
 echarts.use([
@@ -40,19 +42,70 @@ type Props = {
   onSelectedChange: (selected: Record<string, boolean>) => void;
   height?: number;
   label: string;
+  // download name and page heading of the PDF the toolbox icon creates
+  pdf?: ChartPdfMeta;
 };
 
+// The zoom window lives in the ECharts instance only, not in React state, so
+// the export has to read it back from there.
+function zoomWindow(chart: echarts.ECharts): { start: number; end: number } {
+  const option = chart.getOption() as { dataZoom?: { start?: number; end?: number }[] };
+  const slider = option.dataZoom?.[0];
+  return { start: slider?.start ?? 0, end: slider?.end ?? 100 };
+}
+
 export function LineChart(props: Props) {
-  const { columns, lines, xLabel, pointerFormat, restarts, dark, selected, onSelectedChange, height = 380, label } = props;
+  const { columns, lines, xLabel, pointerFormat, restarts, dark, selected, onSelectedChange, height = 380, label, pdf } = props;
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
   const selectedRef = useRef(selected);
   const onSelectedRef = useRef(onSelectedChange);
+  // What the PDF export needs. Kept in refs and updated after every render, so
+  // a new label or a changed legend does not rebuild the chart and the toolbox
+  // callback below can stay the same function for the chart's whole life.
+  const inputRef = useRef<LineChartInput>({ columns, lines, xLabel, pointerFormat, restarts, dark, selected });
+  const pdfRef = useRef<ChartPdfMeta | undefined>(pdf);
+  const labelRef = useRef(label);
 
   useEffect(() => {
     selectedRef.current = selected;
     onSelectedRef.current = onSelectedChange;
+    inputRef.current = { columns, lines, xLabel, pointerFormat, restarts, dark, selected };
+    pdfRef.current = pdf;
+    labelRef.current = label;
   });
+
+  // The chart as the PDF should show it: light colours whatever the app's
+  // theme is, plus the two states of the visible instance - the legend
+  // selection from React state and the zoom window from ECharts.
+  const exportOption = useCallback((): ChartExport => {
+    const chart = chartRef.current;
+    const zoom = chart ? zoomWindow(chart) : { start: 0, end: 100 };
+    return {
+      option: buildLineOption({ ...inputRef.current, dark: false, selected: selectedRef.current }),
+      zoomStart: zoom.start,
+      zoomEnd: zoom.end,
+    };
+  }, []);
+
+  const pdfSource = useCallback(
+    (): ChartPdfSource => ({
+      meta: pdfRef.current ?? { name: [labelRef.current], title: labelRef.current },
+      option: exportOption,
+    }),
+    [exportOption],
+  );
+
+  // jsPDF and the export code arrive with the dynamic import, not in the page
+  // bundle.
+  const savePdf = useCallback(async () => {
+    try {
+      const { downloadChartPdf } = await import("@/lib/chart-pdf");
+      await downloadChartPdf(pdfSource());
+    } catch (error) {
+      toast.error(`PDF export failed: ${(error as Error).message}`);
+    }
+  }, [pdfSource]);
 
   // (Re)create the chart when data or theme change. Legend state is applied
   // separately below so toggling a metric does not rebuild the chart.
@@ -72,7 +125,18 @@ export function LineChart(props: Props) {
     chart.on("legendselectchanged", (event) => {
       onSelectedRef.current({ ...(event as { selected: Record<string, boolean> }).selected });
     });
-    chart.setOption(buildLineOption({ columns, lines, xLabel, pointerFormat, restarts, dark, selected: selectedRef.current }));
+    chart.setOption(
+      buildLineOption({
+        columns,
+        lines,
+        xLabel,
+        pointerFormat,
+        restarts,
+        dark,
+        selected: selectedRef.current,
+        onSavePdf: savePdf,
+      }),
+    );
 
     const observer = new ResizeObserver(() => chart.resize());
     observer.observe(element);
@@ -81,7 +145,7 @@ export function LineChart(props: Props) {
       chart.dispose();
       chartRef.current = null;
     };
-  }, [columns, lines, xLabel, pointerFormat, restarts, dark]);
+  }, [columns, lines, xLabel, pointerFormat, restarts, dark, savePdf]);
 
   useEffect(() => {
     chartRef.current?.setOption({ legend: { selected } });

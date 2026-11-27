@@ -527,6 +527,11 @@ function DeviceChart({
                 selected={selected}
                 onSelectedChange={setSelected}
                 label={`${alias} ${metric} per device`}
+                pdf={{
+                  name: [info.name, alias, metric, "devices"],
+                  title: `${alias} · ${metric}`,
+                  subtitle: `${info.name} · ${devices.length} device(s)`,
+                }}
               />
             }
             metrics={[metric]}

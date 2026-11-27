@@ -244,6 +244,11 @@ function CompareForFile({ info, descriptions }: { info: FileInfo; descriptions: 
                   selected={selected}
                   onSelectedChange={setSelected}
                   label="Compare different metrics chart"
+                  pdf={{
+                    name: [info.name, "compare"],
+                    title: "Compare different metrics",
+                    subtitle: `${info.name} · ${resolved.map((s) => s.label).join(" · ")}`,
+                  }}
                 />
               }
               data={() => (
