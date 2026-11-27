@@ -17,10 +17,23 @@ export type ChartSlot = {
   subOrder: number;
 };
 
+// What the collective statistics CSV needs per card: which series to ask the
+// API for, and the label that heads its block.
+export type StatsSource = {
+  file: string;
+  alias: string;
+  device: string | null;
+  start?: string;
+  end?: string;
+  label: string;
+};
+
 export type RegisteredChart = ChartSlot & {
   id: number;
   // read late so zoom, legend state and labels are the current ones
   source: () => ChartPdfSource;
+  // missing for charts outside the overview
+  stats?: () => StatsSource;
 };
 
 type Register = (chart: Omit<RegisteredChart, "id">) => () => void;

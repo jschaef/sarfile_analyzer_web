@@ -2,7 +2,7 @@
 
 import { ListFilterIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { LineChart } from "@/components/charts/line-chart";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -54,6 +54,21 @@ export function ChartCard(props: Props) {
   const visibleRestarts = restarts.some((x) => x >= first && x <= last) ? restarts : NO_RESTARTS;
   const visibleCount = metrics.filter((m) => selected[m] !== false).length;
   const label = title ? `${alias} ${title}` : alias;
+
+  // stable, so registering the chart does not repeat on every render
+  // label as in build_overview_stats_csv: the alias, and the device appended
+  // only when it is a real one ('all' and no device stay plain)
+  const statsSource = useCallback(
+    () => ({
+      file,
+      alias,
+      device: series.device ?? null,
+      start,
+      end,
+      label: series.device && series.device !== "all" ? `${alias} - ${series.device}` : alias,
+    }),
+    [file, alias, series.device, start, end],
+  );
 
   function setAll(visible: boolean) {
     setSelected(Object.fromEntries(metrics.map((m) => [m, visible])));
@@ -125,6 +140,7 @@ export function ChartCard(props: Props) {
                 subtitle: [file, start && end && `${start} - ${end}`].filter(Boolean).join(" · "),
               }}
               collect={order === undefined ? undefined : { order, subOrder: subOrder ?? 0 }}
+              statsSource={statsSource}
             />
           </TabsContent>
           <TabsContent value="statistics">

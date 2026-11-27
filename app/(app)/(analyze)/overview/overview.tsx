@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { ChartRegistry, useRegisteredCharts } from "@/components/charts/chart-registry";
 import { AliasSection } from "./alias-section";
 import { MultiPdfButton } from "./multi-pdf-button";
+import { StatsCsvButton } from "./stats-csv-button";
 
 // Above this many diagrams the page gets heavy (dia_overview_pl warns too).
 // Counted in diagrams, not in aliases: headers with devices (IFACE, SOFT, ...)
@@ -247,6 +248,7 @@ function OverviewForFile({ info, descriptions }: { info: FileInfo; descriptions:
           ))}
           <div className="flex flex-wrap items-center gap-2" id="bottom">
             <MultiPdfButton file={info.name} />
+            <StatsCsvButton file={info.name} />
             <a href="#" className={buttonVariants({ variant: "ghost", size: "sm" })}>
               <ArrowUpIcon /> Back to top
             </a>

@@ -1,5 +1,6 @@
 import path from "node:path";
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { deleteFile, login, pdfPages, pdfText, renderedCharts, savePdf, upload } from "./helpers";
 
 const SMALL_FIXTURE = path.join(__dirname, "fixtures", "sar_small.txt");
@@ -99,6 +100,48 @@ test("the many-diagrams warning counts charts, not aliases", async ({ page }) =>
   // the fixture stays below the threshold of 20; the rule is what is checked
   if (charts > 20) await expect(warning).toContainText(`${charts} diagrams shown`);
   else await expect(warning).toHaveCount(0);
+
+  await deleteFile(page, name);
+});
+
+test("the overview button downloads the statistics of every diagram as CSV", async ({ page }) => {
+  await login(page);
+  const name = await upload(page, SMALL_FIXTURE, "synthetic-host");
+
+  await page.goto(`/overview?file=${encodeURIComponent(name)}`);
+  await page.getByRole("button", { name: "Deselect all" }).click();
+  await page.getByRole("button", { name: "CPU", exact: true }).click();
+  await page.getByRole("button", { name: "Block Devices", exact: true }).click();
+  await page.getByTestId("show-diagrams").click();
+  await expect(renderedCharts(page)).toHaveCount(3);
+
+  const button = page.getByTestId("stats-csv");
+  await expect(button).toHaveAttribute("data-sets", "3");
+
+  const [download] = await Promise.all([page.waitForEvent("download"), button.click()]);
+  expect(download.suggestedFilename()).toBe(`${name}_statistics.csv`);
+
+  const csv = await readFile(await download.path(), "utf8");
+  // one block per data set, in the diagram order, separated by a blank line
+  const blocks = csv.trimEnd().split("\n\n");
+  expect(blocks.map((block) => block.split("\n")[0])).toEqual([
+    "Block Devices - nvme0n1",
+    "Block Devices - sda",
+    "CPU",
+  ]);
+  // statistic names in the first column, one column per metric (describe())
+  const cpu = blocks[2].split("\n");
+  expect(cpu[1].startsWith("statistic,%usr,")).toBe(true);
+  expect(cpu.slice(2).map((row) => row.split(",")[0])).toEqual([
+    "count",
+    "mean",
+    "std",
+    "min",
+    "25%",
+    "50%",
+    "75%",
+    "max",
+  ]);
 
   await deleteFile(page, name);
 });
