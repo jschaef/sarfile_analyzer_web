@@ -174,6 +174,15 @@ werden. Kurzfassung für Agenten: [`../CLAUDE.md`](../CLAUDE.md).
   `useRegisteredCharts().length`) und rät zu weniger Metriken oder einem
   kürzeren Zeitraum für das nächste „Update diagrams". Dafür umschließt
   `<ChartRegistry>` auch die Kontroll-Karte.
+- **Statistik-CSV** (`lib/stats-csv.ts`, Knopf neben dem Sammel-PDF): die
+  Statistiken aller angezeigten Datensätze in einer Datei, Format wie
+  `dia_overview_pl.build_overview_stats_csv` — ein Block je Datensatz mit
+  seinem Label (`CPU`, `IFACE - eth0`: Gerät nur, wenn es eins gibt und es
+  nicht `all` heißt), darin `statistic` als erste Spalte und je Metrik eine
+  weitere, Blöcke durch eine Leerzeile getrennt. Reihenfolge wie die
+  Diagramme. Eine Anfrage je Datensatz über `apiLimit`; mit der echten Datei
+  22 Datensätze, 241 Zeilen, unter 1 s (sar-web-api hat die Datei dann schon
+  geparst). Dateiname `<datei>_statistics.csv`.
 - **Sprung ans Seitenende**: „Go to bottom" in der Kontroll-Karte (nur wenn
   Diagramme angezeigt werden) springt auf den Anker `#bottom` am Fuß der
   Diagrammliste, wo der Sammel-PDF-Knopf steht. Entspricht dem

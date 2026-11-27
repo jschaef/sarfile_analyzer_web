@@ -31,8 +31,9 @@ Features:
   sample times, Apache ECharts line charts with zoom, restart markers, a
   statistics tab, a metric description ("man pages") tab and the duplicate
   timestamp warning. Every chart can be saved as a PDF from its toolbox, and
-  one button below the diagrams puts all of them into a single PDF;
-  "Go to bottom" next to the controls jumps straight to that button.
+  one button below the diagrams puts all of them into a single PDF, a second
+  one the statistics of every diagram into a single CSV; "Go to bottom" next to
+  the controls jumps straight to those buttons.
 - **Detailed Metrics**: one heading, one device, one metric – or all metrics of
   the heading ("Summary") – with chart, data table (CSV download, restarts
   highlighted), statistics and metric descriptions.
@@ -185,8 +186,9 @@ E2E:
   the shown files ("all", partial selection), cancel, delete the selection.
 - `e2e/pdf.spec.ts`: the toolbox PDF icon of a chart (download name, one page),
   the collective PDF of two aliases (three pages, titles in the alias order),
-  the "Go to bottom" jump to that button and the many-diagrams warning counting
-  charts rather than aliases.
+  the "Go to bottom" jump to that button, the many-diagrams warning counting
+  charts rather than aliases, and the collective statistics CSV (block per data
+  set, in the diagram order).
 - `e2e/account.spec.ts`: signup (password mismatch, duplicate name, form post
   without JavaScript), no admin menu and "Admins only" for a normal user, Self
   Service, User Management (own row locked, role change seen by the user's open
