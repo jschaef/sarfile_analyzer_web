@@ -1,4 +1,7 @@
-from conftest import FIXTURE
+import pytest
+from conftest import FIXTURE, USER
+
+from api import services
 
 
 def get(client, auth, path, **params):
@@ -78,3 +81,51 @@ def test_header_without_devices_is_rejected(client, auth, uploaded):
         f"/api/v2/files/{uploaded}/threshold", headers=auth, params={"header": "Load", "metric": "ldavg-1"}
     )
     assert response.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# api.services.metric_range of sarfile_analyzer_ng: what /api/v1 and the MCP
+# server reach and this view does not. The computation is shared - the tests
+# above pin that /api/v2 keeps behaving as before.
+# ---------------------------------------------------------------------------
+def test_shared_function_handles_a_header_without_devices(uploaded):
+    """Load has no sub-devices; /api/v2 rejects it (see above), the shared
+    function reports the single series with device null - that is how an agent
+    asks about ldavg-1."""
+    body = services.threshold(USER, uploaded, "Load", "ldavg-1")
+    assert body["alias"] == "Load"
+    assert body["value_min"] <= body["value_max"]
+    assert "matches" not in body
+
+    hits = services.threshold(USER, uploaded, "Load", "ldavg-1", low=body["value_max"])
+    assert hits["matches"] >= 1
+    assert [d["device"] for d in hits["devices"]] == [None]
+    assert hits["devices"][0]["peak"] == body["value_max"]
+
+
+def test_shared_function_keeps_every_cpu(uploaded):
+    """prepare_header_frames collapses CPU-like headers to 'all'; the search
+    across devices must see each CPU."""
+    body = services.threshold(USER, uploaded, "CPU", "%usr", low=0)
+    devices = {d["device"] for d in body["devices"]}
+    assert "all" in devices
+    assert {"0", "1", "2", "3"} <= devices
+
+
+def test_shared_function_agrees_with_the_v2_endpoint(client, auth, uploaded):
+    """Same numbers on both paths - they share the computation, this catches a
+    caller that drifts (a changed default, a lost sort)."""
+    v2 = get(
+        client, auth, f"/api/v2/files/{uploaded}/threshold",
+        header="CPU", metric="%usr", min=40, max=60,
+    )
+    shared = services.threshold(USER, uploaded, "CPU", "%usr", low=40, high=60)
+    assert shared["matches"] == v2["matches"]
+    assert shared["devices"] == v2["devices"]
+    assert shared["rows"] == v2["rows"]
+
+
+def test_shared_function_rejects_an_unknown_metric(uploaded):
+    with pytest.raises(services.ServiceError) as error:
+        services.threshold(USER, uploaded, "CPU", "%nonsense")
+    assert "%nonsense" in str(error.value)

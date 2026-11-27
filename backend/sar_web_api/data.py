@@ -370,72 +370,19 @@ def threshold(
 ) -> dict:
     """Which devices hit low <= metric <= high, and when ("Metrics on many
     devices", display_multi.py). Without low/high only the metric's value
-    range is returned - what the threshold slider needs."""
+    range is returned - what the threshold slider needs.
+
+    The computation itself lives in api.services of sarfile_analyzer_ng so
+    /api/v1 and the MCP server share it; the wide frame comes from the cache
+    here, so it is parsed once per file and header. That function also allows
+    headers WITHOUT sub-devices - this view does not, its whole point is the
+    comparison across devices.
+    """
     frame = header_frame(username, name, header_or_alias)
     if not frame.devices:
         raise ServiceError(f"Header {frame.alias!r} has no devices")
-    if metric not in frame.metrics:
-        raise ServiceError(f"Unknown metric {metric!r}; available: {frame.metrics}")
-    values = frame.wide.select(
-        pl.col("date"), pl.col("sub_device").alias("device"), pl.col(metric).alias("value")
-    ).drop_nulls("value")
-    result: dict = {
-        "header": frame.header,
-        "alias": frame.alias,
-        "metric": metric,
-        "value_min": values["value"].min(),
-        "value_max": values["value"].max(),
-        "start": str(values["date"].min()),
-        "end": str(values["date"].max()),
-    }
-    if low is None and high is None:
-        return result
-
-    # time window first: a window without any samples is an error, a window
-    # without matching samples is just matches = 0
-    hits = _time_filter(values, start, end)
-    if low is not None:
-        hits = hits.filter(pl.col("value") >= low)
-    if high is not None:
-        hits = hits.filter(pl.col("value") <= high)
-    # same device order as _natural: 'all', CPUs numerically, then names
-    hits = hits.sort(
-        [
-            pl.col("date"),
-            pl.when(pl.col("device") == "all").then(0).when(pl.col("device").str.contains(r"^\d+$")).then(1).otherwise(2),
-            pl.col("device").cast(pl.Int64, strict=False),
-            pl.col("device"),
-        ],
-        nulls_last=True,
-        maintain_order=True,
-    )
-    per_device = (
-        hits.group_by("device")
-        .agg(
-            pl.len().alias("count"),
-            pl.col("date").min().alias("first"),
-            pl.col("date").max().alias("last"),
-            pl.col("value").max().alias("peak"),
-        )
-        .with_columns(pl.col("first").dt.epoch("ms"), pl.col("last").dt.epoch("ms"))
-    )
-    shown = hits.head(limit).with_columns(pl.col("date").dt.epoch("ms").alias("time"))
-    result.update(
-        {
-            "matches": hits.height,
-            "devices": sorted(per_device.to_dicts(), key=lambda d: _natural(d["device"])),
-            "rows": shown.select("time", "device", "value").to_dicts(),
-            "rows_returned": shown.height,
-        }
-    )
-    return result
-
-
-def _natural(device: str) -> tuple:
-    """'all' first, then numbers numerically (CPU 2 before CPU 10), then names."""
-    if device == "all":
-        return (0, 0, "")
-    return (1, int(device), "") if device.isdigit() else (2, 0, device)
+    found = services.metric_range(frame.wide, metric, low, high, start, end, limit)
+    return {"header": frame.header, "alias": frame.alias, **found}
 
 
 _QUANTILES = {"25%": 0.25, "50%": 0.5, "75%": 0.75}
