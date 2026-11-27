@@ -14,6 +14,7 @@ import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { useChartRegister, type ChartSlot } from "@/components/charts/chart-registry";
 import { buildLineOption, type Line, type LineChartInput } from "@/lib/echarts-option";
 import type { ChartExport, ChartPdfMeta, ChartPdfSource } from "@/lib/chart-pdf";
 import type { Columns } from "@/lib/sar";
@@ -44,6 +45,9 @@ type Props = {
   label: string;
   // download name and page heading of the PDF the toolbox icon creates
   pdf?: ChartPdfMeta;
+  // where this chart belongs in a collective PDF; only has an effect inside a
+  // <ChartRegistry> (the overview)
+  collect?: ChartSlot;
 };
 
 // The zoom window lives in the ECharts instance only, not in React state, so
@@ -106,6 +110,14 @@ export function LineChart(props: Props) {
       toast.error(`PDF export failed: ${(error as Error).message}`);
     }
   }, [pdfSource]);
+
+  // report this chart to the page's registry so one button can export them all
+  const register = useChartRegister();
+  const { order, subOrder } = props.collect ?? {};
+  useEffect(() => {
+    if (!register || order === undefined) return;
+    return register({ order, subOrder: subOrder ?? 0, source: pdfSource });
+  }, [register, order, subOrder, pdfSource]);
 
   // (Re)create the chart when data or theme change. Legend state is applied
   // separately below so toggling a metric does not rebuild the chart.

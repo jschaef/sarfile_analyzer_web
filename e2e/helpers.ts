@@ -53,10 +53,22 @@ export async function savePdf(page: Page, chart: Locator): Promise<Download> {
   return download;
 }
 
-// Number of pages of a downloaded PDF, and a check that it is one at all.
-export async function pdfPages(download: Download): Promise<number> {
-  const file = await download.path();
-  const bytes = await readFile(file);
+// Reads a downloaded PDF and checks that it is one at all.
+async function pdfBytes(download: Download): Promise<string> {
+  const bytes = await readFile(await download.path());
   expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
-  return (bytes.toString("latin1").match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
+  return bytes.toString("latin1");
+}
+
+export async function pdfPages(download: Download): Promise<number> {
+  return ((await pdfBytes(download)).match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
+}
+
+// The text of a PDF in page order. jsPDF writes it as plain "(text) Tj"
+// operators, so no PDF library is needed to check titles and their order.
+export async function pdfText(download: Download): Promise<string[]> {
+  const matches = (await pdfBytes(download)).matchAll(/\((?:\\.|[^()\\])*\)\s*Tj/g);
+  return [...matches].map((match) =>
+    match[0].slice(1, match[0].lastIndexOf(")")).replace(/\\([()\\])/g, "$1"),
+  );
 }
