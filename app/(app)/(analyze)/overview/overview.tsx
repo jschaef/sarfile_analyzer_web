@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpIcon, BarChart3Icon, ClockIcon, Undo2Icon, XIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, BarChart3Icon, ClockIcon, Undo2Icon, XIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { FilePicker, NoFiles, PageTitle, SELECT_CLASS } from "@/components/analyze/file-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -12,12 +12,30 @@ import type { FileInfo } from "@/lib/api";
 import { useFileInfo, useMetricDescriptions, useSelectedFile } from "@/lib/hooks";
 import { DEFAULT_OVERVIEW_ALIASES, clockTime } from "@/lib/sar";
 import { cn } from "@/lib/utils";
-import { ChartRegistry } from "@/components/charts/chart-registry";
+import { ChartRegistry, useRegisteredCharts } from "@/components/charts/chart-registry";
 import { AliasSection } from "./alias-section";
 import { MultiPdfButton } from "./multi-pdf-button";
 
 // Above this many diagrams the page gets heavy (dia_overview_pl warns too).
-const MANY_ALIASES = 20;
+// Counted in diagrams, not in aliases: headers with devices (IFACE, SOFT, ...)
+// turn into one chart per device, so 17 aliases can be 22 charts.
+const MANY_DIAGRAMS = 20;
+
+// The exact number is only known once the charts are mounted - the file info
+// says whether a header has devices, not how many. So the warning appears
+// with the diagrams and asks for a shorter range before the next update.
+function ManyDiagrams() {
+  const count = useRegisteredCharts().length;
+  if (count <= MANY_DIAGRAMS) return null;
+  return (
+    <Alert data-testid="many-diagrams">
+      <AlertDescription>
+        {count} diagrams shown. Many diagrams take a while and need a lot of browser memory - consider
+        fewer metrics or a shorter time range.
+      </AlertDescription>
+    </Alert>
+  );
+}
 
 type TimeRange = { start: string; end: string };
 
@@ -86,7 +104,9 @@ function OverviewForFile({ info, descriptions }: { info: FileInfo; descriptions:
   }
 
   return (
-    <>
+    // the registry wraps the controls as well: the warning above the diagrams
+    // counts the charts that are mounted below
+    <ChartRegistry>
       <Card>
         <CardHeader>
           <CardTitle>Select which metrics to display</CardTitle>
@@ -129,14 +149,7 @@ function OverviewForFile({ info, descriptions }: { info: FileInfo; descriptions:
               );
             })}
           </div>
-          {selected.length > MANY_ALIASES && (
-            <Alert>
-              <AlertDescription>
-                {selected.length} metrics selected. Large files with many diagrams take a while and need
-                a lot of browser memory - consider a shorter time range.
-              </AlertDescription>
-            </Alert>
-          )}
+          <ManyDiagrams />
 
           <div className="flex flex-wrap items-end gap-4 border-t pt-4">
             <div className="flex flex-col gap-1.5">
@@ -181,6 +194,18 @@ function OverviewForFile({ info, descriptions }: { info: FileInfo; descriptions:
               Full day
             </Button>
             <div className="ml-auto flex gap-2">
+              {shown && (
+                // next to the controls, like the "Go to bottom" link of
+                // dia_overview_pl: with many diagrams the PDF button at the
+                // end of the page is a long way down
+                <a
+                  href="#bottom"
+                  className={buttonVariants({ variant: "ghost", size: "sm" })}
+                  data-testid="go-to-bottom"
+                >
+                  <ArrowDownIcon /> Go to bottom
+                </a>
+              )}
               <Button onClick={show} disabled={selected.length === 0} data-testid="show-diagrams">
                 <BarChart3Icon /> {shown ? "Update diagrams" : "Show diagrams"}
               </Button>
@@ -200,36 +225,34 @@ function OverviewForFile({ info, descriptions }: { info: FileInfo; descriptions:
       </Card>
 
       {shown && (
-        // every card is mounted at once, so the registry inside sees all of
-        // them and can export them into one PDF
-        <ChartRegistry>
-          <div className="space-y-8" id="diagrams" data-testid="diagrams">
-            {!isFullRange && (
-              <p className="text-sm text-muted-foreground">
-                Time range {range.start} – {range.end}
-              </p>
-            )}
-            {selected.map((alias, index) => (
-              <AliasSection
-                key={`${alias}|${range.start}|${range.end}`}
-                file={info.name}
-                alias={alias}
-                order={index}
-                start={isFullRange ? undefined : range.start}
-                end={isFullRange ? undefined : range.end}
-                restarts={restarts}
-                descriptions={descriptions}
-              />
-            ))}
-            <div className="flex flex-wrap items-center gap-2">
-              <MultiPdfButton file={info.name} />
-              <a href="#" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-                <ArrowUpIcon /> Back to top
-              </a>
-            </div>
+        // every card is mounted at once, so the registry sees all of them and
+        // can export them into one PDF
+        <div className="space-y-8" id="diagrams" data-testid="diagrams">
+          {!isFullRange && (
+            <p className="text-sm text-muted-foreground">
+              Time range {range.start} – {range.end}
+            </p>
+          )}
+          {selected.map((alias, index) => (
+            <AliasSection
+              key={`${alias}|${range.start}|${range.end}`}
+              file={info.name}
+              alias={alias}
+              order={index}
+              start={isFullRange ? undefined : range.start}
+              end={isFullRange ? undefined : range.end}
+              restarts={restarts}
+              descriptions={descriptions}
+            />
+          ))}
+          <div className="flex flex-wrap items-center gap-2" id="bottom">
+            <MultiPdfButton file={info.name} />
+            <a href="#" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+              <ArrowUpIcon /> Back to top
+            </a>
           </div>
-        </ChartRegistry>
+        </div>
       )}
-    </>
+    </ChartRegistry>
   );
 }
