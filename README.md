@@ -184,8 +184,9 @@ E2E:
 - `e2e/files.spec.ts`: Manage SAR Files with three uploads – search, select
   the shown files ("all", partial selection), cancel, delete the selection.
 - `e2e/pdf.spec.ts`: the toolbox PDF icon of a chart (download name, one page),
-  the collective PDF of two aliases (three pages, titles in the alias order)
-  and the "Go to bottom" jump to that button.
+  the collective PDF of two aliases (three pages, titles in the alias order),
+  the "Go to bottom" jump to that button and the many-diagrams warning counting
+  charts rather than aliases.
 - `e2e/account.spec.ts`: signup (password mismatch, duplicate name, form post
   without JavaScript), no admin menu and "Admins only" for a normal user, Self
   Service, User Management (own row locked, role change seen by the user's open

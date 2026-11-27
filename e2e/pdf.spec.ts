@@ -65,3 +65,40 @@ test("the go-to-bottom link jumps to the PDF button", async ({ page }) => {
 
   await deleteFile(page, name);
 });
+
+test("the many-diagrams warning counts charts, not aliases", async ({ page }) => {
+  await login(page);
+  const name = await upload(page, SMALL_FIXTURE, "synthetic-host");
+
+  await page.goto(`/overview?file=${encodeURIComponent(name)}`);
+  const warning = page.getByTestId("many-diagrams");
+  // nothing is mounted yet, so there is nothing to warn about
+  await expect(warning).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Select all" }).first().click();
+  const aliases = await page.getByTestId("alias-pills").locator("button[aria-pressed=true]").count();
+  await expect(warning).toHaveCount(0);
+
+  await page.getByTestId("show-diagrams").click();
+  // the sections load one after another; wait until every chart is drawn.
+  // Headers with devices become one chart each, so there end up being more
+  // charts than aliases - which is why the threshold counts charts.
+  await expect
+    .poll(
+      async () => {
+        const all = await page.getByTestId("echart").count();
+        const drawn = await renderedCharts(page).count();
+        return all > 0 && all === drawn ? drawn : -1;
+      },
+      { timeout: 60_000 },
+    )
+    .toBeGreaterThan(aliases);
+  const charts = await renderedCharts(page).count();
+  await expect(page.getByTestId("multi-pdf")).toHaveAttribute("data-charts", String(charts));
+
+  // the fixture stays below the threshold of 20; the rule is what is checked
+  if (charts > 20) await expect(warning).toContainText(`${charts} diagrams shown`);
+  else await expect(warning).toHaveCount(0);
+
+  await deleteFile(page, name);
+});
