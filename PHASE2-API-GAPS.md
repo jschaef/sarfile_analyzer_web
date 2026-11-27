@@ -59,8 +59,14 @@ was left out on purpose.
 ## Still open / new limits
 
 - **Statistics CSV export (12), parse progress (14), SSO (15).**
-- **PDF export** (`POST /api/v1/charts/overview`, Bokeh + Selenium) is not wired
-  into the frontend and was not tested.
+- **PDF export** is done, but client-side, not through
+  `POST /api/v1/charts/overview` (Bokeh + Selenium) – that endpoint stays
+  unused. Reasons: the session tokens of `/api/v1` and `/api/v2` are not
+  interchangeable, the result would not show what the user sees (no zoom, no
+  legend selection), it would bring a second Selenium/Firefox pool into
+  sar-web-api, and it is slow. `lib/chart-pdf.ts` builds the PDF from the
+  ECharts instances in the browser; see
+  [docs/knowledge.md](docs/knowledge.md).
 - **Repeated time axis for many devices:** in `series` every device carries its
   own `x`. For 352 CPUs × 2 833 samples that is most of the 19.7 MB response.
   A shared `x` when all devices have the same timestamps would shrink it to

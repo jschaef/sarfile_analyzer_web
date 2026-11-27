@@ -97,11 +97,84 @@ werden. Kurzfassung für Agenten: [`../CLAUDE.md`](../CLAUDE.md).
   Rückfrage. Gelöscht wird nacheinander über `DELETE /api/v2/files/{name}`
   (räumt auch den Redis-Eintrag ab); Fehlschläge bleiben ausgewählt.
   Entspricht „Delete Sar Files“ (Multiselect) in der Streamlit-App.
+- **PDF-Export der Diagramme**: eigener Abschnitt 4.
 - `components/help-note.tsx`: `useInfo()` lädt `/api/v2/info` einmal pro
   Seitenaufruf (Modul-Cache, `refreshInfo()` nach Settings-Änderung).
   Liefert Admin-Kontakt, Signup an/aus, `max_header_count`, `streamlit_url`.
 
-## 4. sar-web-api (backend/)
+## 4. PDF-Export der Diagramme (Stand 27.11.2026)
+
+- **Wo**: zweites Toolbox-Icon neben „Save PNG" in jedem Diagramm (alle sechs
+  Verwendungsstellen von `components/charts/line-chart.tsx`: overview,
+  details, devices, compare, multi ×2) und der Knopf „Download all diagrams as
+  PDF (n)" unten in der Graphical Overview. Entspricht dem vierten Tab „📊 PDF"
+  je Diagramm und dem Schalter „Create PDF from all diagrams" plus „Prepare
+  Multi-PDF" der Streamlit-App (`code/dia_overview_pl.py`).
+- **Client-seitig, bewusst nicht über den Server.** Verworfen wurde der Weg
+  über das vorhandene `POST /api/v1/charts/overview` (Bokeh + Selenium) aus
+  vier Gründen: die Session-Tokens von `/api/v1` und `/api/v2` sind nicht
+  austauschbar (das Frontend bräuchte einen zweiten Login oder ein
+  Service-Konto); das Ergebnis zeigt nicht, was der Benutzer sieht (Bokeh-Optik,
+  kein Zoom, keine Legendenauswahl); es brächte einen zweiten
+  Selenium/Firefox-Pool in sar-web-api (in sarfile_analyzer_ng dokumentiert:
+  `min(CPUs/2, 4)` warme Firefox-Instanzen je Prozess, dazu ein Profil-Leak in
+  /tmp); und es ist langsam (Overview-PDF mit 5 Seiten rund 9 s, gemessen Juli
+  2026). Client-seitig entfällt all das: 5 Seiten in **1,2 s**, 264 KB
+  (gemessen 27.11.2026, echte sar-Datei, 143 Samples je Diagramm).
+  Qualitativ ist das keine Verschlechterung – auch der Streamlit-Weg rendert
+  PNG-in-PDF (Bokeh → Selenium `export_png` → PIL → PDF).
+- **`lib/chart-pdf.ts`**: baut einen unsichtbaren Chart in einem Off-Screen-
+  Container (1200×740 px, Seitenverhältnis so gewählt, dass das Bild eine
+  A4-Querformat-Seite unter dem Titel füllt), holt per `getDataURL`
+  (`pixelRatio` 2) ein PNG und setzt mit **jsPDF** eine Seite je Diagramm
+  zusammen. jsPDF kommt per `dynamic import()`, bleibt also aus den
+  Seiten-Bundles heraus.
+- **Zwei Festlegungen**, die den Export prägen:
+  1. **PDFs sind immer hell**, egal in welchem Theme die App läuft – sie sollen
+     zum Drucken und Weitergeben taugen. `getDataURL` mit weißem Hintergrund
+     genügt dafür **nicht**: im Dark Mode bleiben Achsen- und Schriftfarben
+     hell. Deshalb wird die Option über `buildLineOption({ ..., dark: false })`
+     neu gebaut und in einer eigenen, ungethemten ECharts-Instanz gezeichnet.
+  2. **Inhalt wie auf dem Schirm**: Legendenauswahl und aktueller Zoom-Bereich
+     landen im PDF. Die Legendenauswahl steht im React-State (`selected` in
+     `chart-card.tsx`), der **Zoom-Bereich steckt nur in der ECharts-Instanz**
+     und muss per `chart.getOption().dataZoom[0].start/end` ausgelesen werden.
+     Weil die x-Achse auf `min`/`max` der Daten festgenagelt ist, lassen sich
+     die Prozentwerte linear in Achsengrenzen umrechnen; der Zoom-Regler und
+     die Toolbox fallen im PDF weg, die Legende wird von `scroll` auf `plain`
+     umgestellt (ein Pager würde in einem Standbild Metriken verstecken).
+     Bewusst anders als Streamlits Sammel-PDF, das die Figuren aus den vollen
+     Daten neu baut.
+- **Dateinamen** wie in Streamlit: `<datei>_<alias>[_<device>].pdf` bzw.
+  `<datei>_diagrams.pdf`. `sanitizeName` bildet
+  `helpers_pl.validate_convert_names` nach (Leerzeichen → `_`, `%` →
+  `percent_`, `/s` → `_per_second_`, `_-` → `-`) und ersetzt danach alles,
+  was kein `[\w.-]` ist – sonst käme bei „I/O and transfer rate" ein `/` in
+  den Dateinamen.
+- **Sammel-PDF**: `components/charts/chart-registry.tsx` ist ein React-Context;
+  `LineChart` meldet sich beim Mount mit `order` (Position des Alias in der
+  Options-Reihenfolge) und `subOrder` (Position des Geräts) an. Das trägt, weil
+  die Overview alle Karten gleichzeitig mountet (`overview.tsx` →
+  `AliasSection` → `ChartCard`, der Chart-Tab ist `keepMounted`). Die
+  Seitenreihenfolge folgt damit der Options-Reihenfolge, nicht der
+  Klick-Reihenfolge (`sel_order_map`). Abgearbeitet wird sequenziell mit einem
+  `sonner`-Fortschritts-Toast („page n of m").
+- **Fallstricke**:
+  - `addImage` **ohne Kompression** legt das PNG roh ab: 7 MB je Seite. Mit
+    `compression: "FAST"` sind es rund 60 KB.
+  - Eigene Toolbox-Features müssen `my…` heißen (ECharts' `ToolboxView`),
+    sonst werden sie ignoriert. Das Icon ist ein `path://`-Umriss (lucide
+    „file-down"), gezeichnet wird es wie die eingebauten Icons mit
+    `iconStyle.borderColor`.
+  - `lib/echarts-option.ts` darf **keine Laufzeit-Imports** haben
+    (`perf/bench.mjs` transpiliert die Datei); `buildLineOption` nimmt deshalb
+    nur einen `onSavePdf`-Callback entgegen, der eigentliche Export liegt in
+    `lib/chart-pdf.ts`.
+  - Die Toolbox wird aufs Canvas gemalt, hat also kein DOM-Element: der
+    Playwright-Test klickt das Icon über `savePdf()` in `e2e/helpers.ts` nach
+    gemessenen Pixel-Offsets vom rechten Rand des Charts.
+
+## 5. sar-web-api (backend/)
 
 - `bootstrap.py`: findet sarfile_analyzer_ng, `use_database(path)` bindet
   `sql_stuff.data_db/engine/Session/session` neu (`SAR_WEB_DB`).
@@ -125,7 +198,7 @@ werden. Kurzfassung für Agenten: [`../CLAUDE.md`](../CLAUDE.md).
   `SAR_WEB_DB`, `SAR_WEB_STATE_DIR`, `SAR_WEB_CACHE_FILES/HEADERS`,
   `UPLOAD_DIR`, `SAR_BACKEND_DIR`. Details: `backend/README.md`.
 
-## 5. Laufzeit-Einstellungen (Admin › Settings)
+## 6. Laufzeit-Einstellungen (Admin › Settings)
 
 - Definiert in **sarfile_analyzer_ng `code/config.py`**: `EDITABLE_SETTINGS`
   (Name → Typ, Env-Variable, min, max), `SECRET_SETTINGS`,
@@ -147,14 +220,14 @@ werden. Kurzfassung für Agenten: [`../CLAUDE.md`](../CLAUDE.md).
   `UPLOAD_DIR=$PWD/upload venv/bin/python -c 'import config; print(config.update_settings({"admin_email": "…"}))'`
   (in `code/`; `None` entfernt einen Wert).
 
-## 6. Tests und lokale Entwicklung
+## 7. Tests und lokale Entwicklung
 
 - Backend: `cd backend && python -m pytest` (im venv von
   sarfile_analyzer_ng). `conftest.py` kopiert die Seed-DB und **schlägt fehl,
   wenn sich der Hash der Seed-`data.db` geändert hat**. Redis-Test startet
   einen echten `redis-server`, falls vorhanden. Stand: 54 Tests.
 - Frontend: `npm run lint`, `npm run typecheck`, `npm run build`,
-  `npx playwright test` (21 Tests; real-file und Screenshots nur mit Env).
+  `npx playwright test` (23 Tests; real-file und Screenshots nur mit Env).
 - Playwright nutzt den **Production-Build** (`next start`): vorher
   `npm run build` – und zwar **mit Standard-API-URL** (8200). Ein Build mit
   `SAR_WEB_API_URL=…:8300` (Lab) lässt die E2E-Tests mit ECONNREFUSED scheitern.
@@ -175,7 +248,7 @@ werden. Kurzfassung für Agenten: [`../CLAUDE.md`](../CLAUDE.md).
 - Testdaten: `scripts/generate_sar.py` (z. B. `--samples 1440 --interval 60
   --cpus 8` ≈ 3,3 MB; `--restart` fügt einen LINUX RESTART ein).
 
-## 7. Lab-Deployment dus-lab-sar
+## 8. Lab-Deployment dus-lab-sar
 
 - Server `dus-lab-sar.lab.dus.suse.com` (SLES 15, nur über VPN), User
   `jschaef`, Repos unter `~/data1/sarfile_analyzer_ng` und
@@ -213,7 +286,7 @@ werden. Kurzfassung für Agenten: [`../CLAUDE.md`](../CLAUDE.md).
 - Vollständige Doku: `deployment/lab/README.md` (Web) und
   `deployment/lab/README-lab.md` (sarfile_analyzer_ng).
 
-## 8. Verlauf
+## 9. Verlauf
 
 - PR #1 Phase 2: sar-web-api schließt die API-Lücken (`PHASE2-API-GAPS.md`).
 - PR #2 Phase 3: Detailed Metrics, Metrics on many devices, Compare Metrics,
@@ -224,12 +297,14 @@ werden. Kurzfassung für Agenten: [`../CLAUDE.md`](../CLAUDE.md).
   Streamlit-Link-Settings, Restart-Farben in Multiple SAR Files,
   Upload direkt über nginx, Mehrfachauswahl zum Löschen in Manage SAR Files
   (`8eb9728`), Uhrzeit statt 1970 im Overlay (`ad03098`).
+- Branch `jschaef/chart-pdf-export` (27.11.2026): PDF-Export der Diagramme,
+  client-seitig aus den ECharts-Instanzen (Abschnitt 4).
 - In sarfile_analyzer_ng (Author Jochen): Benutzername `config` reserviert,
   Laufzeit-Settings, Sidebar-Link, `streamlit_url`, Lab-Doku.
 - Copilot-Reviews auf #2/#3 brachten drei echte Fixes (threshold-Zeitfenster,
   Login-Historie-Zählung, eindeutige Feld-IDs im Heading-Formular).
 
-## 9. Offene Punkte und bekannte Grenzen
+## 10. Offene Punkte und bekannte Grenzen
 
 - **Dependabot `braces`** (GHSA-vfj7-8cjw-p6xm): nur in Dev-Abhängigkeiten
   (shadcn, `@next/eslint-plugin-next`); `npm audit --omit=dev` = 0. GitHub hat
