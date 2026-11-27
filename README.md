@@ -30,7 +30,8 @@ Features:
   utilization), per-chart metric selection, start/end from the file's real
   sample times, Apache ECharts line charts with zoom, restart markers, a
   statistics tab, a metric description ("man pages") tab and the duplicate
-  timestamp warning.
+  timestamp warning. Every chart can be saved as a PDF from its toolbox, and
+  one button below the diagrams puts all of them into a single PDF.
 - **Detailed Metrics**: one heading, one device, one metric – or all metrics of
   the heading ("Summary") – with chart, data table (CSV download, restarts
   highlighted), statistics and metric descriptions.
@@ -108,9 +109,17 @@ browser ──► Next.js :3100 ──┬─ /api/auth/login|logout|signup  rout
 - Duplicate timestamps: the first value is plotted (`keep='first'`, like
   `final_results`) and the card shows a warning.
 - Charts: canvas renderer, LTTB sampling, `dataZoom` (wheel + slider), animation
-  off, legend/metric menu to hide metrics, restarts as dashed red line, PNG export
-  from the toolbox. ECharts' `large` mode does not exist for line series (only
-  scatter/bar/lines), so it is not used. Option builder: `lib/echarts-option.ts`.
+  off, legend/metric menu to hide metrics, restarts as dashed red line, PNG and
+  PDF export from the toolbox. ECharts' `large` mode does not exist for line
+  series (only scatter/bar/lines), so it is not used. Option builder:
+  `lib/echarts-option.ts`.
+- PDF export (`lib/chart-pdf.ts`): built in the browser from the ECharts
+  instance, never on the server. The page is always light, whatever theme the
+  app is in, and shows the chart as it is on screen – zoom window and hidden
+  metrics included. Download name as in Streamlit
+  (`<file>_<alias>[_<device>].pdf`, `validate_convert_names`); the collective
+  PDF is `<file>_diagrams.pdf` with one A4 landscape page per diagram in the
+  alias order.
 
 ## Run locally
 
@@ -173,6 +182,9 @@ E2E:
   httpOnly cookie, wrong password, cross-site 403).
 - `e2e/files.spec.ts`: Manage SAR Files with three uploads – search, select
   the shown files ("all", partial selection), cancel, delete the selection.
+- `e2e/pdf.spec.ts`: the toolbox PDF icon of a chart (download name, one page)
+  and the collective PDF of two aliases (three pages, titles in the alias
+  order).
 - `e2e/account.spec.ts`: signup (password mismatch, duplicate name, form post
   without JavaScript), no admin menu and "Admins only" for a normal user, Self
   Service, User Management (own row locked, role change seen by the user's open
@@ -223,7 +235,8 @@ python3 scripts/generate_sar.py --cpus 352 --samples 2833 --interval 30 --minima
 app/login, app/signup     login and signup pages (components/auth-page, help-note)
 app/(app)/files           file management
 app/(app)/(analyze)       analysis views with a shared sub navigation (layout.tsx):
-  overview                  Graphical Overview (overview, alias-section, chart-card)
+  overview                  Graphical Overview (overview, alias-section, chart-card,
+                            multi-pdf-button)
   details                   Detailed Metrics
   devices                   Metrics on many devices
   compare                   Compare Metrics
@@ -235,7 +248,8 @@ components/analyze        shared parts of the views: file picker, sub navigation
                           result tabs, data table, statistics, metric descriptions
 app/api/auth/*, api/upload  route handlers (cookie + revocation, signup, streaming upload)
 backend/                  sar-web-api (FastAPI, pytest; accounts.py for the account/admin endpoints)
-components/charts         ECharts wrapper (tree-shaken echarts/core)
+components/charts         ECharts wrapper (tree-shaken echarts/core) and the chart
+                          registry for the collective PDF
 components/ui             shadcn/ui components
 lib/                      API client, hooks, sar data helpers, describe() statistics,
                           ECharts option builder

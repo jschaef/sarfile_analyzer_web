@@ -12,7 +12,9 @@ import type { FileInfo } from "@/lib/api";
 import { useFileInfo, useMetricDescriptions, useSelectedFile } from "@/lib/hooks";
 import { DEFAULT_OVERVIEW_ALIASES, clockTime } from "@/lib/sar";
 import { cn } from "@/lib/utils";
+import { ChartRegistry } from "@/components/charts/chart-registry";
 import { AliasSection } from "./alias-section";
+import { MultiPdfButton } from "./multi-pdf-button";
 
 // Above this many diagrams the page gets heavy (dia_overview_pl warns too).
 const MANY_ALIASES = 20;
@@ -198,27 +200,35 @@ function OverviewForFile({ info, descriptions }: { info: FileInfo; descriptions:
       </Card>
 
       {shown && (
-        <div className="space-y-8" id="diagrams" data-testid="diagrams">
-          {!isFullRange && (
-            <p className="text-sm text-muted-foreground">
-              Time range {range.start} – {range.end}
-            </p>
-          )}
-          {selected.map((alias) => (
-            <AliasSection
-              key={`${alias}|${range.start}|${range.end}`}
-              file={info.name}
-              alias={alias}
-              start={isFullRange ? undefined : range.start}
-              end={isFullRange ? undefined : range.end}
-              restarts={restarts}
-              descriptions={descriptions}
-            />
-          ))}
-          <a href="#" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-            <ArrowUpIcon /> Back to top
-          </a>
-        </div>
+        // every card is mounted at once, so the registry inside sees all of
+        // them and can export them into one PDF
+        <ChartRegistry>
+          <div className="space-y-8" id="diagrams" data-testid="diagrams">
+            {!isFullRange && (
+              <p className="text-sm text-muted-foreground">
+                Time range {range.start} – {range.end}
+              </p>
+            )}
+            {selected.map((alias, index) => (
+              <AliasSection
+                key={`${alias}|${range.start}|${range.end}`}
+                file={info.name}
+                alias={alias}
+                order={index}
+                start={isFullRange ? undefined : range.start}
+                end={isFullRange ? undefined : range.end}
+                restarts={restarts}
+                descriptions={descriptions}
+              />
+            ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <MultiPdfButton file={info.name} />
+              <a href="#" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                <ArrowUpIcon /> Back to top
+              </a>
+            </div>
+          </div>
+        </ChartRegistry>
       )}
     </>
   );

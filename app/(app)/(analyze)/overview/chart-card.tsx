@@ -26,6 +26,9 @@ import { StatisticsTable } from "@/components/analyze/statistics-table";
 type Props = {
   file: string;
   alias: string;
+  // place of this chart in the collective PDF (alias, then device)
+  order?: number;
+  subOrder?: number;
   series: DeviceSeries;
   metrics: string[];
   title: string | null;
@@ -39,7 +42,7 @@ type Props = {
 const NO_RESTARTS: number[] = [];
 
 export function ChartCard(props: Props) {
-  const { file, alias, series, metrics, title, subtitle, start, end, restarts, descriptions } = props;
+  const { file, alias, order, subOrder, series, metrics, title, subtitle, start, end, restarts, descriptions } = props;
   const { resolvedTheme } = useTheme();
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [tab, setTab] = useState<string>("chart");
@@ -115,6 +118,13 @@ export function ChartCard(props: Props) {
               selected={selected}
               onSelectedChange={setSelected}
               label={`${label} chart`}
+              pdf={{
+                // <file>_<alias>[_<device>].pdf, as in the Streamlit overview
+                name: [file, alias, series.device],
+                title: subtitle ? `${label} (${subtitle})` : label,
+                subtitle: [file, start && end && `${start} - ${end}`].filter(Boolean).join(" · "),
+              }}
+              collect={order === undefined ? undefined : { order, subOrder: subOrder ?? 0 }}
             />
           </TabsContent>
           <TabsContent value="statistics">

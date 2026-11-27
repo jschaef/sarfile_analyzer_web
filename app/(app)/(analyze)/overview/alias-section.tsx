@@ -10,6 +10,9 @@ import { ChartCard } from "./chart-card";
 type Props = {
   file: string;
   alias: string;
+  // position of this alias in the option order - the order of the pages in
+  // the collective PDF
+  order: number;
   start?: string;
   end?: string;
   restarts: number[];
@@ -19,7 +22,7 @@ type Props = {
 // One header (alias) of the overview, one request: sar-web-api applies the
 // rules of dia_compute.prepare_df_for_pandas itself (no sub-devices -> one
 // series; CPU-like -> only 'all'; DEV, IFACE, ... -> every device).
-export function AliasSection({ file, alias, start, end, restarts, descriptions }: Props) {
+export function AliasSection({ file, alias, order, start, end, restarts, descriptions }: Props) {
   const [data, setData] = useState<SeriesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,11 +45,13 @@ export function AliasSection({ file, alias, start, end, restarts, descriptions }
         </Alert>
       )}
       {!data && !error && <Skeleton className="h-[440px] w-full" />}
-      {data?.series.map((series) => (
+      {data?.series.map((series, index) => (
         <ChartCard
           key={series.device ?? "-"}
           file={file}
           alias={alias}
+          order={order}
+          subOrder={index}
           series={series}
           metrics={data.metrics}
           // "all of N" for the CPU aggregate, the device name for DEV/IFACE charts

@@ -460,6 +460,17 @@ function DiagramView({
                 selected={selected}
                 onSelectedChange={setSelected}
                 label={`${title} across files`}
+                pdf={{
+                  name: [`${ordered.length}_files`, alias, device, metric],
+                  title: `${title} across ${ordered.length} file(s)`,
+                  subtitle: [
+                    consecutive ? "real time axis" : "laid over one 24-hour axis",
+                    range && `${range.start}-${range.end}`,
+                    ordered.map((info) => info.name).join(", "),
+                  ]
+                    .filter(Boolean)
+                    .join(" · "),
+                }}
               />
             }
             data={() => (
@@ -587,6 +598,7 @@ function SummaryCard({
                 selected={selected}
                 onSelectedChange={setSelected}
                 label={`${info.name} ${title} chart`}
+                pdf={{ name: [info.name, alias, device], title, subtitle: info.name }}
               />
             }
             data={() => (
