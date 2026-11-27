@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpIcon, BarChart3Icon, ClockIcon, Undo2Icon, XIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, BarChart3Icon, ClockIcon, Undo2Icon, XIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { FilePicker, NoFiles, PageTitle, SELECT_CLASS } from "@/components/analyze/file-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -181,6 +181,18 @@ function OverviewForFile({ info, descriptions }: { info: FileInfo; descriptions:
               Full day
             </Button>
             <div className="ml-auto flex gap-2">
+              {shown && (
+                // next to the controls, like the "Go to bottom" link of
+                // dia_overview_pl: with many diagrams the PDF button at the
+                // end of the page is a long way down
+                <a
+                  href="#bottom"
+                  className={buttonVariants({ variant: "ghost", size: "sm" })}
+                  data-testid="go-to-bottom"
+                >
+                  <ArrowDownIcon /> Go to bottom
+                </a>
+              )}
               <Button onClick={show} disabled={selected.length === 0} data-testid="show-diagrams">
                 <BarChart3Icon /> {shown ? "Update diagrams" : "Show diagrams"}
               </Button>
@@ -221,7 +233,7 @@ function OverviewForFile({ info, descriptions }: { info: FileInfo; descriptions:
                 descriptions={descriptions}
               />
             ))}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2" id="bottom">
               <MultiPdfButton file={info.name} />
               <a href="#" className={buttonVariants({ variant: "ghost", size: "sm" })}>
                 <ArrowUpIcon /> Back to top

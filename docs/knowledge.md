@@ -159,6 +159,21 @@ werden. Kurzfassung für Agenten: [`../CLAUDE.md`](../CLAUDE.md).
   Seitenreihenfolge folgt damit der Options-Reihenfolge, nicht der
   Klick-Reihenfolge (`sel_order_map`). Abgearbeitet wird sequenziell mit einem
   `sonner`-Fortschritts-Toast („page n of m").
+- **Gemessen am 27.11.2026** mit einer echten sar-Datei (16 CPU, 7722 Zeilen,
+  17 Aliase → **22 Diagramme**, „Select all"): Rendern 2,1 s, Heap +16 MB;
+  Sammel-PDF **4,7 s**, 22 Seiten, 2,0 MB; Heap-Gipfel während des Exports
+  rund 150 MB. Ein Versuch, die Seiten einzeln an jsPDF zu geben statt erst
+  alle PNGs zu sammeln, senkte den Gipfel **nicht** – jsPDF hält die Bilder
+  ohnehin bis zum `output()` – und wurde deshalb verworfen.
+- Die Warnung „N metrics selected" greift ab `MANY_ALIASES = 20` **Aliasen**,
+  nicht ab 20 Diagrammen. Die bisher gesehenen sar-Dateien haben höchstens
+  17 Aliase, erzeugen daraus aber 22 Karten – die Warnung erscheint also nie,
+  obwohl die Seite lang wird.
+- **Sprung ans Seitenende**: „Go to bottom" in der Kontroll-Karte (nur wenn
+  Diagramme angezeigt werden) springt auf den Anker `#bottom` am Fuß der
+  Diagrammliste, wo der Sammel-PDF-Knopf steht. Entspricht dem
+  `#bottom-section`-Anker von `dia_overview_pl` (Zeile 461 bzw. 778). Das
+  Gegenstück „Back to top" gab es schon.
 - **Fallstricke**:
   - `addImage` **ohne Kompression** legt das PNG roh ab: 7 MB je Seite. Mit
     `compression: "FAST"` sind es rund 60 KB.

@@ -45,3 +45,23 @@ test("the overview button downloads one PDF with a page per diagram", async ({ p
 
   await deleteFile(page, name);
 });
+
+test("the go-to-bottom link jumps to the PDF button", async ({ page }) => {
+  await login(page);
+  const name = await upload(page, SMALL_FIXTURE, "synthetic-host");
+
+  await page.goto(`/overview?file=${encodeURIComponent(name)}`);
+  // without diagrams there is nothing below, so the link stays away
+  await expect(page.getByTestId("go-to-bottom")).toHaveCount(0);
+
+  await page.getByTestId("show-diagrams").click();
+  await expect(renderedCharts(page)).toHaveCount(5);
+  await expect(page.getByTestId("multi-pdf")).not.toBeInViewport();
+
+  await page.getByTestId("go-to-bottom").click();
+  await expect(page).toHaveURL(/#bottom$/);
+  // what the jump is for: the collective PDF button at the end of the page
+  await expect(page.getByTestId("multi-pdf")).toBeInViewport();
+
+  await deleteFile(page, name);
+});

@@ -31,7 +31,8 @@ Features:
   sample times, Apache ECharts line charts with zoom, restart markers, a
   statistics tab, a metric description ("man pages") tab and the duplicate
   timestamp warning. Every chart can be saved as a PDF from its toolbox, and
-  one button below the diagrams puts all of them into a single PDF.
+  one button below the diagrams puts all of them into a single PDF;
+  "Go to bottom" next to the controls jumps straight to that button.
 - **Detailed Metrics**: one heading, one device, one metric – or all metrics of
   the heading ("Summary") – with chart, data table (CSV download, restarts
   highlighted), statistics and metric descriptions.
@@ -182,9 +183,9 @@ E2E:
   httpOnly cookie, wrong password, cross-site 403).
 - `e2e/files.spec.ts`: Manage SAR Files with three uploads – search, select
   the shown files ("all", partial selection), cancel, delete the selection.
-- `e2e/pdf.spec.ts`: the toolbox PDF icon of a chart (download name, one page)
-  and the collective PDF of two aliases (three pages, titles in the alias
-  order).
+- `e2e/pdf.spec.ts`: the toolbox PDF icon of a chart (download name, one page),
+  the collective PDF of two aliases (three pages, titles in the alias order)
+  and the "Go to bottom" jump to that button.
 - `e2e/account.spec.ts`: signup (password mismatch, duplicate name, form post
   without JavaScript), no admin menu and "Admins only" for a normal user, Self
   Service, User Management (own row locked, role change seen by the user's open
